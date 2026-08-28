@@ -1,0 +1,26 @@
+{
+  "pathogen": "Leveillula taurica / Oidium neolycopersici",
+  "commonName": "Powdery Mildew",
+  "targetCrops": ["Tomato", "Pepper", "Eggplant", "Squash", "Cucumber"],
+  "optimalTempRangeC": [20, 28],
+  "favorableMinTempC": 15,
+  "favorableMaxTempC": 35,
+  "criticalHumidityThresholdPercent": 60,
+  "favorableRainfallCondition": "dry",
+  "consecutiveHighHumidityHours": 4,
+  "susceptibleGrowthStages": ["vegetative", "flowering", "fruiting"],
+  "soilTextureSusceptibility": ["Sandy Loam", "Loam"],
+  "soilPhRange": [6.0, 7.5],
+  "factors": {
+    "temperatureWeight": 0.35,
+    "humidityWeight": 0.30,
+    "rainfallWeight": 0.15,
+    "growthStageWeight": 0.15,
+    "soilFactorWeight": 0.05
+  },
+  "agronomicAdvice": [
+    "Powdery Mildew does not require free leaf water; moderate-to-high relative humidity with warm, dry daylight hours drives conidial sporulation.",
+    "Improve greenhouse/field ventilation and avoid dense canopy overcrowding.",
+    "Apply sulfur-based or bio-fungicide sprays at the first visual sign of powdery white patches."
+  ]
+}

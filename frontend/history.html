@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diagnosis History — PlantGuard AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="./assets/css/styles.css">
+</head>
+<body class="bg-emerald-50/60 min-h-screen text-slate-800 flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-white/80 backdrop-blur-md border-b border-emerald-100 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-2 text-xl font-bold text-emerald-800">
+        <span class="text-2xl">🌿</span>
+        <span>PlantGuard <span class="text-emerald-600 font-normal">AI</span></span>
+      </a>
+      <nav class="flex items-center gap-6 text-sm font-medium text-slate-600">
+        <a href="index.html" class="hover:text-emerald-700 transition">Diagnose</a>
+        <a href="history.html" class="text-emerald-700 font-semibold border-b-2 border-emerald-600 pb-1">History</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-5xl mx-auto px-4 py-8 w-full">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <div>
+        <h1 class="text-2xl font-extrabold text-slate-900">Diagnosis History</h1>
+        <p class="text-xs text-slate-500">View and review past leaf diagnoses and treatment plans</p>
+      </div>
+      <a href="index.html" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition inline-block text-center">
+        + New Diagnosis
+      </a>
+    </div>
+
+    <!-- Filter & Search Bar -->
+    <div class="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm mb-6 flex flex-col sm:flex-row gap-3">
+      <input type="text" id="search-input" placeholder="Search by plant or disease..." class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500">
+      <select id="filter-status" class="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500">
+        <option value="all">All Diagnoses</option>
+        <option value="diseased">Diseased</option>
+        <option value="healthy">Healthy</option>
+      </select>
+    </div>
+
+    <!-- History Records List -->
+    <div id="history-container" class="space-y-4">
+      <!-- Dynamic list injected by history.js -->
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden bg-white p-12 rounded-2xl border border-emerald-100 text-center">
+      <div class="text-4xl mb-3">🍃</div>
+      <h3 class="font-bold text-slate-700 mb-1">No diagnosis records found</h3>
+      <p class="text-xs text-slate-400 mb-4">Start by uploading a leaf image for AI analysis.</p>
+      <a href="index.html" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold">
+        Perform Diagnosis Now
+      </a>
+    </div>
+  </main>
+
+  <footer class="bg-white border-t border-emerald-100 py-6 text-center text-xs text-slate-400">
+    <p>PlantGuard AI — Agricultural Decision Support</p>
+  </footer>
+
+  <script src="./assets/js/history.js"></script>
+</body>
+</html>

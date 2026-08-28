@@ -1,0 +1,27 @@
+{
+  "pathogen": "Alternaria solani",
+  "commonName": "Early Blight",
+  "targetCrops": ["Tomato", "Potato", "Eggplant"],
+  "optimalTempRangeC": [24, 29],
+  "favorableMinTempC": 18,
+  "favorableMaxTempC": 32,
+  "criticalHumidityThresholdPercent": 80,
+  "favorableRainfallCondition": "moderate",
+  "consecutiveHighHumidityHours": 8,
+  "susceptibleGrowthStages": ["vegetative", "flowering", "fruiting", "ripening"],
+  "soilTextureSusceptibility": ["Sandy Loam", "Clay Loam", "Silt Loam"],
+  "soilPhRange": [5.5, 7.5],
+  "factors": {
+    "temperatureWeight": 0.25,
+    "humidityWeight": 0.35,
+    "rainfallWeight": 0.20,
+    "growthStageWeight": 0.15,
+    "soilFactorWeight": 0.05
+  },
+  "agronomicAdvice": [
+    "High humidity and temperatures between 24-29°C create favorable spore germination conditions for Early Blight.",
+    "Ensure drip irrigation at the soil base rather than overhead sprinkler watering to minimize foliage wetness.",
+    "Maintain balanced potassium and avoid excessive nitrogen fertilization which produces overly succulent, susceptible tissue.",
+    "Remove lower senescent leaves that touch damp soil."
+  ]
+}

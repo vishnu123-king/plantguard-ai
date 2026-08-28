@@ -1,0 +1,25 @@
+{
+  "pathogen": "Magnaporthe oryzae",
+  "commonName": "Rice Blast",
+  "targetCrops": ["Rice", "Paddy"],
+  "optimalTempRangeC": [25, 28],
+  "favorableMinTempC": 20,
+  "favorableMaxTempC": 32,
+  "criticalHumidityThresholdPercent": 88,
+  "favorableRainfallCondition": "high",
+  "consecutiveHighHumidityHours": 12,
+  "susceptibleGrowthStages": ["seedling", "vegetative", "flowering", "ripening"],
+  "soilTextureSusceptibility": ["Clay", "Silty Clay", "Loam"],
+  "soilPhRange": [5.0, 6.8],
+  "factors": {
+    "temperatureWeight": 0.30,
+    "humidityWeight": 0.40,
+    "rainfallWeight": 0.20,
+    "growthStageWeight": 0.10
+  },
+  "agronomicAdvice": [
+    "Prolonged leaf wetness combined with nighttime dew and high relative humidity (>88%) triggers blast spore germination.",
+    "Split nitrogen fertilizer applications to prevent high vegetative succulent canopy nitrogen content.",
+    "Maintain balanced water management in paddy fields and avoid prolonged field drying cycles during critical stages."
+  ]
+}

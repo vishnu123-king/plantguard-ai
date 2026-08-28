@@ -1,0 +1,27 @@
+{
+  "pathogen": "Pseudocercospora musae (Black / Yellow Sigatoka)",
+  "commonName": "Sigatoka Leaf Spot",
+  "targetCrops": ["Banana", "Plantain"],
+  "optimalTempRangeC": [25, 30],
+  "favorableMinTempC": 21,
+  "favorableMaxTempC": 35,
+  "criticalHumidityThresholdPercent": 90,
+  "favorableRainfallCondition": "high",
+  "consecutiveHighHumidityHours": 8,
+  "susceptibleGrowthStages": ["vegetative", "flowering", "fruiting"],
+  "soilTextureSusceptibility": ["Clay Loam", "Silty Clay"],
+  "soilPhRange": [5.5, 7.5],
+  "factors": {
+    "temperatureWeight": 0.25,
+    "humidityWeight": 0.40,
+    "rainfallWeight": 0.20,
+    "growthStageWeight": 0.10,
+    "soilFactorWeight": 0.05
+  },
+  "agronomicAdvice": [
+    "Sigatoka proliferation intensifies during continuous leaf wetness and warm tropical showers.",
+    "Systematic de-leafing of infected banana leaves reduces ascospore dispersal.",
+    "Maintain plantation spacing of at least 2.5m x 2.5m to allow sunlight and wind penetration through the pseudostem canopy.",
+    "Apply systemic triazole or strobilurin fungicides in rotation with mineral oils to prevent chemical resistance."
+  ]
+}

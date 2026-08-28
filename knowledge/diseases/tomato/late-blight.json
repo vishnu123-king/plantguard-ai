@@ -1,0 +1,27 @@
+{
+  "pathogen": "Phytophthora infestans",
+  "commonName": "Late Blight",
+  "targetCrops": ["Tomato", "Potato"],
+  "optimalTempRangeC": [15, 21],
+  "favorableMinTempC": 10,
+  "favorableMaxTempC": 24,
+  "criticalHumidityThresholdPercent": 85,
+  "favorableRainfallCondition": "high",
+  "consecutiveHighHumidityHours": 10,
+  "susceptibleGrowthStages": ["vegetative", "flowering", "fruiting", "ripening"],
+  "soilTextureSusceptibility": ["Clay", "Clay Loam", "Silt Loam"],
+  "soilPhRange": [5.0, 7.0],
+  "factors": {
+    "temperatureWeight": 0.25,
+    "humidityWeight": 0.40,
+    "rainfallWeight": 0.25,
+    "growthStageWeight": 0.08,
+    "soilFactorWeight": 0.02
+  },
+  "agronomicAdvice": [
+    "Late Blight is an aggressive oomycete that proliferates rapidly under cool, saturated humidity (>85%) and wet leaves.",
+    "Inspect lower canopy undersides for white velvety sporulation following rain events.",
+    "Ensure maximum row spacing to facilitate quick canopy drying after precipitation.",
+    "Destroy heavily blighted plants immediately to protect adjacent plots."
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "PlantGuard AI",
+  "description": "AI-powered plant leaf disease detection, geospatial environmental intelligence, and explainable risk assessment system",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

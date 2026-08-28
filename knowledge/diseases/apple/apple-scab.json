@@ -1,0 +1,25 @@
+{
+  "pathogen": "Venturia inaequalis",
+  "commonName": "Apple Scab",
+  "targetCrops": ["Apple"],
+  "optimalTempRangeC": [17, 24],
+  "favorableMinTempC": 10,
+  "favorableMaxTempC": 28,
+  "criticalHumidityThresholdPercent": 85,
+  "favorableRainfallCondition": "moderate",
+  "consecutiveHighHumidityHours": 9,
+  "susceptibleGrowthStages": ["vegetative", "flowering", "fruiting"],
+  "soilTextureSusceptibility": ["Loam", "Sandy Loam"],
+  "soilPhRange": [6.0, 7.0],
+  "factors": {
+    "temperatureWeight": 0.30,
+    "humidityWeight": 0.40,
+    "rainfallWeight": 0.20,
+    "growthStageWeight": 0.10
+  },
+  "agronomicAdvice": [
+    "Apple scab ascospores discharge after spring rainfall when wet periods coincide with temperatures above 15°C.",
+    "Monitor Mills infection period tables based on hours of continuous leaf wetness and temperature.",
+    "Rake and shred fallen apple orchard leaves in autumn to eliminate overwintering pseudothecia."
+  ]
+}

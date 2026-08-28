@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=PlantGuard AI
+      - ENVIRONMENT=development
+      - DATABASE_URL=sqlite:///./plantguard.db
+      - AI_PROVIDER=mock
+      - MAX_UPLOAD_SIZE_MB=10
+    volumes:
+      - ./uploads:/app/uploads
+      - ./plantguard.db:/app/plantguard.db

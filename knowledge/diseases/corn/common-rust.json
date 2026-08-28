@@ -1,0 +1,23 @@
+{
+  "pathogen": "Puccinia sorghi",
+  "commonName": "Common Rust",
+  "targetCrops": ["Corn", "Maize"],
+  "optimalTempRangeC": [16, 25],
+  "favorableMinTempC": 10,
+  "favorableMaxTempC": 30,
+  "criticalHumidityThresholdPercent": 85,
+  "favorableRainfallCondition": "moderate",
+  "consecutiveHighHumidityHours": 6,
+  "susceptibleGrowthStages": ["vegetative", "flowering", "fruiting"],
+  "factors": {
+    "temperatureWeight": 0.35,
+    "humidityWeight": 0.35,
+    "rainfallWeight": 0.20,
+    "growthStageWeight": 0.10
+  },
+  "agronomicAdvice": [
+    "Urediniospores require high humidity (>85%) and 6 hours of dew/free water at 16–25°C to germinate.",
+    "Plant resistant corn hybrids; field scouting is critical prior to tassel emergence.",
+    "If rust pustules cover more than 5% of upper leaf surface before reproductive silking, evaluate targeted fungicide application."
+  ]
+}

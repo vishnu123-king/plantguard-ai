@@ -1,0 +1,27 @@
+{
+  "pathogen": "Cordana musae / Neocordana musae",
+  "commonName": "Cordana Leaf Spot",
+  "targetCrops": ["Banana", "Plantain"],
+  "optimalTempRangeC": [24, 30],
+  "favorableMinTempC": 20,
+  "favorableMaxTempC": 34,
+  "criticalHumidityThresholdPercent": 85,
+  "favorableRainfallCondition": "high",
+  "consecutiveHighHumidityHours": 6,
+  "susceptibleGrowthStages": ["vegetative", "flowering", "fruiting"],
+  "soilTextureSusceptibility": ["Clay", "Clay Loam", "Silt Loam"],
+  "soilPhRange": [5.5, 7.0],
+  "factors": {
+    "temperatureWeight": 0.25,
+    "humidityWeight": 0.35,
+    "rainfallWeight": 0.25,
+    "growthStageWeight": 0.10,
+    "soilFactorWeight": 0.05
+  },
+  "agronomicAdvice": [
+    "Cordana leaf spot is exacerbated by high relative humidity (>85%) and poor canopy air circulation in dense plantations.",
+    "Prune and de-leaf severely infected or necrotic banana foliage to diminish local fungal inoculum.",
+    "Improve drainage ditches in the plantation to prevent waterlogging during monsoonal downpours.",
+    "Apply protective bio-fungicide or copper-based formulations on young developing leaves during sustained humid spells."
+  ]
+}
