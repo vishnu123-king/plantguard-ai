@@ -41,18 +41,51 @@ export const Layer2EnvironmentalIntelligence: React.FC<Layer2Props> = ({ current
 
   // Form State for Adding Farm
   const [farmForm, setFarmForm] = useState<CreateFarmInput>({
-    name: 'Coimbatore Agro Plot 1',
+    name: 'My Farm Plot',
     latitude: 11.0168,
     longitude: 76.9558,
     accuracyM: 6.5,
-    cropType: 'Tomato',
-    cropVariety: 'Pusa Ruby',
+    cropType: 'Banana',
+    cropVariety: 'Grand Naine',
     plantingDate: '2026-07-15',
-    growthStage: 'flowering',
+    growthStage: 'vegetative',
     waterSource: 'borewell',
     waterCondition: 'sufficient',
-    notes: 'South field plot under drip irrigation.'
+    notes: 'Monitored field plot.'
   });
+
+  // Automatically adapt or create an active farm matching the uploaded diagnosed crop
+  useEffect(() => {
+    if (currentDiagnosis && currentDiagnosis.plant_name) {
+      const detectedPlant = currentDiagnosis.plant_name;
+      // Check if current selected farm matches the diagnosed crop
+      if (selectedFarm && selectedFarm.cropType.toLowerCase() !== detectedPlant.toLowerCase()) {
+        // Find if another farm matches
+        const matchingFarm = farms.find(
+          (f) => f.cropType.toLowerCase() === detectedPlant.toLowerCase()
+        );
+        if (matchingFarm) {
+          setSelectedFarmId(matchingFarm.id);
+        } else {
+          // Dynamically adapt the active farm context or create a session farm matching the diagnosed crop
+          const updatedFarm: FarmContext = {
+            ...selectedFarm,
+            cropType: detectedPlant,
+            cropVariety: 'Field Variety',
+            name: `${detectedPlant} Plot (${selectedFarm.location.latitude.toFixed(2)}°N, ${selectedFarm.location.longitude.toFixed(2)}°E)`
+          };
+          setSelectedFarm(updatedFarm);
+          // Also prefill the add-farm form with the diagnosed crop
+          setFarmForm((prev) => ({
+            ...prev,
+            cropType: detectedPlant,
+            cropVariety: 'Field Variety',
+            name: `${detectedPlant} Plot`
+          }));
+        }
+      }
+    }
+  }, [currentDiagnosis, farms, selectedFarm]);
 
   // Load farms on mount
   useEffect(() => {

@@ -47,8 +47,48 @@ export class FarmRepository {
       updatedAt: '2026-08-10T12:00:00.000Z'
     };
 
+    const defaultFarm3: FarmContext = {
+      id: 'farm_003',
+      name: 'Trichy Banana Plantation Block 2',
+      location: {
+        latitude: 10.7905,
+        longitude: 78.7047,
+        accuracyM: 5.2
+      },
+      cropType: 'Banana',
+      cropVariety: 'Grand Naine',
+      plantingDate: '2026-02-20',
+      growthStage: 'vegetative',
+      waterSource: 'canal',
+      waterCondition: 'sufficient',
+      notes: 'Tropical riverbed alluvial banana grove with drip fertigation',
+      createdAt: '2026-02-20T08:00:00.000Z',
+      updatedAt: '2026-08-15T12:00:00.000Z'
+    };
+
+    const defaultFarm4: FarmContext = {
+      id: 'farm_004',
+      name: 'Shimla Apple Orchard High Altitude',
+      location: {
+        latitude: 31.1048,
+        longitude: 77.1734,
+        accuracyM: 7.0
+      },
+      cropType: 'Apple',
+      cropVariety: 'Royal Delicious',
+      plantingDate: '2025-11-10',
+      growthStage: 'fruiting',
+      waterSource: 'rainfed',
+      waterCondition: 'moderate',
+      notes: 'Hillside terrace with scab warning telemetry',
+      createdAt: '2025-11-10T08:00:00.000Z',
+      updatedAt: '2026-08-12T12:00:00.000Z'
+    };
+
     this.farms.set(defaultFarm.id, defaultFarm);
     this.farms.set(defaultFarm2.id, defaultFarm2);
+    this.farms.set(defaultFarm3.id, defaultFarm3);
+    this.farms.set(defaultFarm4.id, defaultFarm4);
   }
 
   async createFarm(input: CreateFarmInput): Promise<FarmContext> {
