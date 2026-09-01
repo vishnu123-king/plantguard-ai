@@ -181,36 +181,60 @@ Return a JSON object ONLY matching this exact JSON structure:
   "prevention": ["Agronomic prevention measure 1", "Agronomic prevention measure 2"]
 }`;
 
-        // Use valid modern Gemini models
-        const candidateModels = ["gemini-3.7-flash", "gemini-2.5-flash", "gemini-flash-latest"];
+        // Modern Gemini vision models with priority order and fallback
+        const candidateModels = [
+          "gemini-2.5-flash",
+          "gemini-3.7-flash",
+          "gemini-2.5-pro",
+          "gemini-flash-latest"
+        ];
         let response: any = null;
         let lastError: any = null;
 
+        // Try candidate models with retry/backoff on 503/429
         for (const modelName of candidateModels) {
-          try {
-            response = await ai.models.generateContent({
-              model: modelName,
-              contents: [
-                {
-                  inlineData: {
-                    mimeType: mimeType,
-                    data: base64Image
+          let attempts = 0;
+          const maxAttempts = 2;
+
+          while (attempts < maxAttempts) {
+            try {
+              attempts++;
+              response = await ai.models.generateContent({
+                model: modelName,
+                contents: [
+                  {
+                    inlineData: {
+                      mimeType: mimeType,
+                      data: base64Image
+                    }
+                  },
+                  {
+                    text: prompt
                   }
-                },
-                {
-                  text: prompt
+                ],
+                config: {
+                  responseMimeType: "application/json"
                 }
-              ],
-              config: {
-                responseMimeType: "application/json"
+              });
+
+              if (response && response.text) {
+                break;
               }
-            });
-            if (response && response.text) {
+            } catch (modelErr: any) {
+              lastError = modelErr;
+              const status = modelErr?.status || modelErr?.code;
+              // If 503 (high demand) or 429 (rate limit), pause briefly before trying again or switching model
+              if ((status === 503 || status === 429) && attempts < maxAttempts) {
+                await new Promise((resolve) => setTimeout(resolve, 800));
+                continue;
+              }
+              // If model not found or persistent 503, immediately try the next model in candidate list
               break;
             }
-          } catch (modelErr) {
-            lastError = modelErr;
-            continue;
+          }
+
+          if (response && response.text) {
+            break;
           }
         }
 
