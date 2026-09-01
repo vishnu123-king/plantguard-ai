@@ -597,23 +597,61 @@ export const Layer2EnvironmentalIntelligence: React.FC<Layer2Props> = ({ current
               </p>
             </div>
 
-            {/* GPS Detection Bar */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between gap-4">
-              <div>
-                <span className="text-xs font-semibold text-slate-400 uppercase">GPS Location</span>
-                <div className="font-mono text-sm text-emerald-400 font-bold mt-0.5">
-                  Lat: {farmForm.latitude.toFixed(4)}, Lng: {farmForm.longitude.toFixed(4)} (±{farmForm.accuracyM || 5}m)
+            {/* GPS Detection & Manual Coordinate Input Bar */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800">
+                <div>
+                  <span className="text-xs font-semibold text-slate-400 uppercase">GPS Location (From Device or Google Maps)</span>
+                  <p className="text-xs text-slate-400">
+                    Use high-accuracy GPS detection or enter your exact coordinates from Google Maps.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={detectLocation}
+                  disabled={isGpsDetecting}
+                  className="flex items-center gap-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-medium px-3.5 py-2 rounded-lg transition"
+                >
+                  <Compass className={`w-3.5 h-3.5 ${isGpsDetecting ? 'animate-spin' : ''}`} />
+                  {isGpsDetecting ? 'Acquiring GPS...' : '📍 Auto-Detect Device GPS'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Latitude (°N / °S) <span className="text-emerald-400 font-mono text-[11px]">(e.g. from Google Maps)</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={farmForm.latitude}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setFarmForm((prev) => ({ ...prev, latitude: val }));
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Longitude (°E / °W) <span className="text-emerald-400 font-mono text-[11px]">(e.g. from Google Maps)</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={farmForm.longitude}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setFarmForm((prev) => ({ ...prev, longitude: val }));
+                    }}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
+                    required
+                  />
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={detectLocation}
-                disabled={isGpsDetecting}
-                className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium px-3.5 py-2 rounded-lg transition"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isGpsDetecting ? 'animate-spin' : ''}`} />
-                {isGpsDetecting ? 'Detecting...' : 'Detect My Location'}
-              </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

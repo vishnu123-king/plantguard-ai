@@ -14,13 +14,16 @@ import {
   Radio,
   Sparkles,
   Newspaper,
-  Compass
+  Compass,
+  Edit3,
+  Check
 } from 'lucide-react';
 import {
   SprayWashoutAdvisory,
   HourlySprayWindowPoint,
   DistrictWeatherNewsAlert
 } from '../shared/types/weather.types';
+import { MobileLocationService } from '../mobile/location.service';
 
 interface SprayWashoutAdvisorProps {
   latitude?: number;
@@ -38,10 +41,21 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
   compact = false
 }) => {
   const [loading, setLoading] = useState<boolean>(true);
+  const [isGpsDetecting, setIsGpsDetecting] = useState<boolean>(false);
+  const [isEditingCoords, setIsEditingCoords] = useState<boolean>(false);
   const [advisory, setAdvisory] = useState<SprayWashoutAdvisory | null>(null);
   const [districtAlert, setDistrictAlert] = useState<DistrictWeatherNewsAlert | null>(null);
-  const [currentLat, setCurrentLat] = useState<number>(latitude);
-  const [currentLon, setCurrentLon] = useState<number>(longitude);
+  
+  // Try to load saved custom coordinates first if present
+  const saved = MobileLocationService.getSavedCoordinates();
+  const initialLat = saved ? saved.latitude : latitude;
+  const initialLon = saved ? saved.longitude : longitude;
+
+  const [currentLat, setCurrentLat] = useState<number>(initialLat);
+  const [currentLon, setCurrentLon] = useState<number>(initialLon);
+  const [inputLat, setInputLat] = useState<string>(initialLat.toFixed(6));
+  const [inputLon, setInputLon] = useState<string>(initialLon.toFixed(6));
+  const [coordSource, setCoordSource] = useState<string>(saved ? 'saved_custom' : 'calibrated_default');
   const [simulationMode, setSimulationMode] = useState<'live' | 'rain_simulation' | 'dry_simulation'>('live');
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
 
@@ -223,7 +237,7 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
       }
 
       // Live Open-Meteo & District News Backend API Call
-      const res = await fetch(`/api/v1/spray-advisor?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`);
+      const res = await fetch(`/api/v1/spray-advisor?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`);
       if (res.ok) {
         const data = await res.json();
         if (data.sprayWashoutAdvisory) {
@@ -242,38 +256,40 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
   };
 
   useEffect(() => {
-    setCurrentLat(latitude);
-    setCurrentLon(longitude);
-    fetchSprayData(latitude, longitude, simulationMode);
-  }, [latitude, longitude, simulationMode]);
+    fetchSprayData(currentLat, currentLon, simulationMode);
+  }, [currentLat, currentLon, simulationMode]);
 
-  const handleUseGpsLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          setCurrentLat(lat);
-          setCurrentLon(lon);
-          fetchSprayData(lat, lon, 'live');
-          setSimulationMode('live');
-        },
-        (err) => {
-          console.warn('Geolocation failed, keeping active coordinates:', err.message);
-        },
-        { timeout: 6000 }
-      );
+  const handleUseGpsLocation = async () => {
+    setIsGpsDetecting(true);
+    const result = await MobileLocationService.getCurrentLocation(true);
+    setIsGpsDetecting(false);
+
+    if (result.success && result.coordinates) {
+      const lat = result.coordinates.latitude;
+      const lon = result.coordinates.longitude;
+      setCurrentLat(lat);
+      setCurrentLon(lon);
+      setInputLat(lat.toFixed(6));
+      setInputLon(lon.toFixed(6));
+      setCoordSource(result.source || 'device_gps');
+      fetchSprayData(lat, lon, 'live');
+      setSimulationMode('live');
     }
   };
 
-  if (loading && !advisory) {
-    return (
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 text-center animate-pulse">
-        <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin mx-auto mb-2" />
-        <p className="text-sm font-semibold text-slate-300">Checking Open-Meteo 5-Hour Rain Probability & District Agromet Bulletins...</p>
-      </div>
-    );
-  }
+  const handleApplyCustomCoordinates = () => {
+    const lat = parseFloat(inputLat);
+    const lon = parseFloat(inputLon);
+    if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      setCurrentLat(lat);
+      setCurrentLon(lon);
+      MobileLocationService.saveCoordinates({ latitude: lat, longitude: lon, accuracyM: 2.5 });
+      setCoordSource('saved_custom');
+      setIsEditingCoords(false);
+      fetchSprayData(lat, lon, 'live');
+      setSimulationMode('live');
+    }
+  };
 
   const isDoNotSpray = advisory?.verdict === 'DO_NOT_SPRAY';
   const isCaution = advisory?.verdict === 'CAUTION_WIND_OR_MARGINAL';
@@ -281,6 +297,105 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Active GPS Coordinates & Location Selector Strip */}
+      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <MapPin className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-white">
+                Active Farm Location: {currentLat.toFixed(4)}°N, {currentLon.toFixed(4)}°E
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300">
+                {coordSource === 'device_gps' ? '📡 Live Phone GPS' : coordSource === 'saved_custom' ? '📍 Saved Custom Coordinates' : '🌐 Regional Baseline'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {districtAlert ? `${districtAlert.district} District, ${districtAlert.state}` : 'Synchronized with Open-Meteo microclimate telemetry'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsEditingCoords(!isEditingCoords)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium transition"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-emerald-400" />
+            {isEditingCoords ? 'Close Input' : 'Edit / Enter Maps Lat & Lng'}
+          </button>
+          <button
+            onClick={handleUseGpsLocation}
+            disabled={isGpsDetecting}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition shadow-xs"
+          >
+            <Compass className={`w-3.5 h-3.5 ${isGpsDetecting ? 'animate-spin' : ''}`} />
+            {isGpsDetecting ? 'Acquiring GPS...' : '📍 Auto-Detect GPS'}
+          </button>
+        </div>
+      </div>
+
+      {/* Expandable Manual Lat/Lng Input (Google Maps compatible) */}
+      {isEditingCoords && (
+        <div className="bg-slate-900 border border-emerald-500/40 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-white flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-emerald-400" /> Set Exact Lat & Long from Google Maps
+            </span>
+            <span className="text-[11px] text-slate-400">
+              Copy lat/lng directly from Google Maps app (e.g. 13.0827, 80.2707)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                Latitude (e.g. 11.016844 or from phone map)
+              </label>
+              <input
+                type="number"
+                step="0.000001"
+                value={inputLat}
+                onChange={(e) => setInputLat(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
+                placeholder="11.016844"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                Longitude (e.g. 76.955832 or from phone map)
+              </label>
+              <input
+                type="number"
+                step="0.000001"
+                value={inputLon}
+                onChange={(e) => setInputLon(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
+                placeholder="76.955832"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={() => setIsEditingCoords(false)}
+              className="px-3 py-1.5 rounded-lg text-slate-400 hover:text-white text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleApplyCustomCoordinates}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition"
+            >
+              <Check className="w-3.5 h-3.5" /> Apply & Sync Weather Forecast
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Primary 5-Hour Spray Feasibility Card */}
       <div
         className={`rounded-2xl p-5 border shadow-sm transition-all ${
@@ -337,10 +452,12 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
             </button>
             <button
               onClick={handleUseGpsLocation}
+              disabled={isGpsDetecting}
               className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-medium transition"
               title="Use Device GPS"
             >
-              <Compass className="w-3 h-3 text-emerald-400" /> My GPS
+              <Compass className={`w-3 h-3 text-emerald-400 ${isGpsDetecting ? 'animate-spin' : ''}`} />
+              {isGpsDetecting ? 'Detecting...' : 'My GPS'}
             </button>
           </div>
         </div>
