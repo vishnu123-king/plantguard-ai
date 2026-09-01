@@ -1,10 +1,10 @@
+import "./src/polyfills";
 import "dotenv/config";
 import express from "express";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
 import { farmRepository } from "./src/services/farm.service";
 import { EnvironmentService } from "./src/services/environment.service";
 import { WeatherService } from "./src/services/weather.service";
@@ -153,6 +153,7 @@ app.post("/api/diagnose", upload.single("image"), async (req, res) => {
     const apiKey = process.env.GEMINI_API_KEY || process.env.AI_API_KEY;
     if (apiKey) {
       try {
+        const { GoogleGenAI } = await import("@google/genai");
         const ai = new GoogleGenAI({
           apiKey,
           httpOptions: {
