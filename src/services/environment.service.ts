@@ -1,15 +1,18 @@
 import { WeatherService } from './weather.service';
 import { SoilService } from './soil.service';
+import { districtNewsService, DistrictNewsService } from './district-news.service';
 import { EnvironmentalProfile } from '../shared/types/environment.types';
 import { FarmCoordinates } from '../shared/types/farm.types';
 
 export class EnvironmentService {
   private weatherService: WeatherService;
   private soilService: SoilService;
+  private districtService: DistrictNewsService;
 
-  constructor(weatherService?: WeatherService, soilService?: SoilService) {
+  constructor(weatherService?: WeatherService, soilService?: SoilService, districtService?: DistrictNewsService) {
     this.weatherService = weatherService || new WeatherService();
     this.soilService = soilService || new SoilService();
+    this.districtService = districtService || districtNewsService;
   }
 
   /**
@@ -53,6 +56,13 @@ export class EnvironmentService {
       };
     }
 
+    // Fetch District News & Agromet Meteorological Bulletin
+    const districtAlert = await this.districtService.getDistrictNewsAlert(
+      latitude,
+      longitude,
+      weatherData.current
+    );
+
     const nowIso = new Date().toISOString();
 
     return {
@@ -65,7 +75,10 @@ export class EnvironmentService {
       weather: {
         current: weatherData.current,
         historical: weatherData.historicalSummary,
-        forecast: weatherData.forecast
+        forecast: weatherData.forecast,
+        next5HoursSprayTimeline: weatherData.next5HoursSprayTimeline,
+        sprayWashoutAdvisory: weatherData.sprayWashoutAdvisory,
+        districtNewsAlert: districtAlert
       },
       soil: soilData,
       retrievedAt: nowIso,
@@ -77,3 +90,4 @@ export class EnvironmentService {
     };
   }
 }
+

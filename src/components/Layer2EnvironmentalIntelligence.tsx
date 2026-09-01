@@ -17,12 +17,15 @@ import {
   Calendar, 
   RefreshCw,
   TrendingUp,
-  FileText
+  FileText,
+  CloudRain,
+  Newspaper
 } from 'lucide-react';
 import { FarmContext, CreateFarmInput } from '../shared/types/farm.types';
 import { EnvironmentalProfile } from '../shared/types/environment.types';
 import { EnhancedCropHealthAnalysis, RiskResult } from '../shared/types/risk.types';
 import { MobileLocationService } from '../mobile/location.service';
+import { SprayWashoutAdvisor } from './SprayWashoutAdvisor';
 
 interface Layer2Props {
   currentDiagnosis?: any;
@@ -37,7 +40,8 @@ export const Layer2EnvironmentalIntelligence: React.FC<Layer2Props> = ({ current
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isGpsDetecting, setIsGpsDetecting] = useState<boolean>(false);
   const [isCreatingFarm, setIsCreatingFarm] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'enhanced' | 'add_farm' | 'raw_api'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'spray_radar' | 'enhanced' | 'add_farm' | 'raw_api'>('dashboard');
+
 
   // Form State for Adding Farm
   const [farmForm, setFarmForm] = useState<CreateFarmInput>({
@@ -261,6 +265,16 @@ export const Layer2EnvironmentalIntelligence: React.FC<Layer2Props> = ({ current
           <Activity className="w-4 h-4" /> Environmental Profile
         </button>
         <button
+          onClick={() => setActiveTab('spray_radar')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+            activeTab === 'spray_radar'
+              ? 'bg-slate-800 text-blue-400 border border-slate-700'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <CloudRain className="w-4 h-4 text-blue-400" /> 5h Spray Radar & District Alerts
+        </button>
+        <button
           onClick={() => setActiveTab('enhanced')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
             activeTab === 'enhanced'
@@ -270,6 +284,7 @@ export const Layer2EnvironmentalIntelligence: React.FC<Layer2Props> = ({ current
         >
           <ShieldAlert className="w-4 h-4" /> Layer 1 + Layer 2 Combined Risk
         </button>
+
         <button
           onClick={() => setActiveTab('add_farm')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
@@ -421,8 +436,37 @@ export const Layer2EnvironmentalIntelligence: React.FC<Layer2Props> = ({ current
           </div>
         )}
 
+        {/* TAB: 5-HOUR SPRAY WASHOUT & DISTRICT WEATHER NEWS */}
+        {activeTab === 'spray_radar' && (
+          <div className="space-y-6">
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold">
+                    <CloudRain className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">5-Hour Spray Feasibility & District Agromet Bulletins</h3>
+                    <p className="text-xs text-slate-400">
+                      Calculates rainfastness adherence window for active farm GPS ({selectedFarm?.location.latitude.toFixed(4)}°N, {selectedFarm?.location.longitude.toFixed(4)}°E)
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <SprayWashoutAdvisor
+                latitude={selectedFarm?.location.latitude || 11.0168}
+                longitude={selectedFarm?.location.longitude || 76.9558}
+                cropName={selectedFarm?.cropType || 'Crop'}
+                diseaseName={currentDiagnosis?.disease_name || 'Foliar Pathogen'}
+              />
+            </div>
+          </div>
+        )}
+
         {/* TAB 2: COMBINED LAYER 1 + LAYER 2 RISK ENGINE */}
         {activeTab === 'enhanced' && (
+
           <div className="space-y-6">
             {enhancedAnalysis ? (
               <div className="space-y-6">

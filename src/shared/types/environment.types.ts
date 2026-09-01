@@ -1,5 +1,12 @@
 import { FarmCoordinates } from './farm.types';
-import { WeatherObservation, WeatherSummary, DailyWeatherForecast } from './weather.types';
+import {
+  WeatherObservation,
+  WeatherSummary,
+  DailyWeatherForecast,
+  HourlySprayWindowPoint,
+  SprayWashoutAdvisory,
+  DistrictWeatherNewsAlert
+} from './weather.types';
 import { SoilProperties } from './soil.types';
 
 export interface EnvironmentalProfile {
@@ -13,6 +20,9 @@ export interface EnvironmentalProfile {
       last7Days: WeatherSummary;
     };
     forecast?: DailyWeatherForecast[];
+    next5HoursSprayTimeline?: HourlySprayWindowPoint[];
+    sprayWashoutAdvisory?: SprayWashoutAdvisory;
+    districtNewsAlert?: DistrictWeatherNewsAlert;
   };
   soil: SoilProperties;
   retrievedAt: string;
@@ -22,3 +32,4 @@ export interface EnvironmentalProfile {
     locationResolution: string;
   };
 }
+

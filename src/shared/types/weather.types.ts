@@ -35,6 +35,63 @@ export interface DailyWeatherForecast {
   weatherCode?: number;
 }
 
+export interface HourlySprayWindowPoint {
+  timeIso: string;
+  hourLabel: string;
+  hourOffset: number; // +1, +2, +3, +4, +5
+  precipitationMm: number;
+  precipitationProbability: number; // 0 to 100%
+  temperatureC: number;
+  relativeHumidityPercent: number;
+  windSpeedKmh: number;
+  weatherCode: number;
+  weatherDescription: string;
+  isRainExpected: boolean;
+}
+
+export interface SprayWashoutAdvisory {
+  canSpray: boolean;
+  verdict: 'SAFE_TO_SPRAY' | 'DO_NOT_SPRAY' | 'CAUTION_WIND_OR_MARGINAL';
+  badgeTitle: string;
+  headline: string;
+  detailedReason: string;
+  rainProbability5hMax: number;
+  totalRainfall5hMm: number;
+  firstRainHour: string | null;
+  dryHoursAvailable: number;
+  rainfastnessRequirementHours: number;
+  windStatus: {
+    windSpeedKmh: number;
+    isWindSafe: boolean;
+    windDriftRisk: 'LOW' | 'MODERATE' | 'HIGH';
+    comment: string;
+  };
+  optimalWindowRecommendation: string;
+  nextSafeSprayWindow: string;
+  hourlyTimeline: HourlySprayWindowPoint[];
+  evaluatedAt: string;
+}
+
+export interface DistrictWeatherNewsAlert {
+  district: string;
+  state: string;
+  country: string;
+  locality?: string;
+  coordinates: {
+    latitude: number;
+    longitude: number;
+  };
+  alertLevel: 'GREEN_CLEAR' | 'YELLOW_WATCH' | 'ORANGE_ALERT' | 'RED_WARNING';
+  alertColor: string;
+  headline: string;
+  bulletinText: string;
+  source: string;
+  issuedAt: string;
+  rainForecastSummary: string;
+  sprayRecommendation: string;
+  fieldDrainageAdvisory?: string;
+}
+
 export interface WeatherDataPayload {
   current: WeatherObservation;
   historicalSummary: {
@@ -43,10 +100,16 @@ export interface WeatherDataPayload {
     last7Days: WeatherSummary;
   };
   forecast: DailyWeatherForecast[];
+  next5HoursSprayTimeline?: HourlySprayWindowPoint[];
+  sprayWashoutAdvisory?: SprayWashoutAdvisory;
+  districtNewsAlert?: DistrictWeatherNewsAlert;
   location: {
     latitude: number;
     longitude: number;
     elevationM?: number;
     timezone?: string;
+    district?: string;
+    state?: string;
   };
 }
+

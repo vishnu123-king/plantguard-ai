@@ -7,8 +7,11 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { farmRepository } from "./src/services/farm.service";
 import { EnvironmentService } from "./src/services/environment.service";
+import { WeatherService } from "./src/services/weather.service";
+import { districtNewsService } from "./src/services/district-news.service";
 import { cropHealthAnalysisService } from "./src/services/crop-health-analysis.service";
 import { CreateFarmSchema } from "./src/shared/schemas/farm.schema";
+
 
 const app = express();
 const PORT = 3000;
@@ -503,7 +506,57 @@ app.get("/api/v1/analysis/enhanced", async (req, res) => {
   }
 });
 
+// 7. Spray Washout & 5-Hour Rain Probability Advisor
+const weatherService = new WeatherService();
+app.get("/api/v1/spray-advisor", async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat as string) || 11.0168;
+    const lon = parseFloat(req.query.lon as string) || 76.9558;
+
+    const weatherData = await weatherService.getWeatherData(lat, lon);
+    const districtAlert = await districtNewsService.getDistrictNewsAlert(lat, lon, weatherData.current);
+
+    res.json({
+      location: {
+        latitude: lat,
+        longitude: lon,
+        district: districtAlert.district,
+        state: districtAlert.state,
+        country: districtAlert.country
+      },
+      currentWeather: weatherData.current,
+      sprayWashoutAdvisory: weatherData.sprayWashoutAdvisory,
+      next5HoursSprayTimeline: weatherData.next5HoursSprayTimeline,
+      districtNewsAlert: districtAlert
+    });
+  } catch (err: any) {
+    console.error("Spray advisor error:", err);
+    res.status(500).json({ error: { code: "SPRAY_ADVISOR_FAILED", message: err.message } });
+  }
+});
+
+// 8. District Meteorological Rain News & Agromet Bulletins
+app.get("/api/v1/district-news", async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat as string) || 11.0168;
+    const lon = parseFloat(req.query.lon as string) || 76.9558;
+
+    const weatherData = await weatherService.getWeatherData(lat, lon).catch(() => null);
+    const districtAlert = await districtNewsService.getDistrictNewsAlert(
+      lat,
+      lon,
+      weatherData ? weatherData.current : undefined
+    );
+
+    res.json(districtAlert);
+  } catch (err: any) {
+    console.error("District news error:", err);
+    res.status(500).json({ error: { code: "DISTRICT_NEWS_FAILED", message: err.message } });
+  }
+});
+
 // Vite Development Integration
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

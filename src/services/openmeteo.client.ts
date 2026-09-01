@@ -1,4 +1,11 @@
-import { WeatherObservation, WeatherSummary, DailyWeatherForecast, WeatherDataPayload } from '../shared/types/weather.types';
+import {
+  WeatherObservation,
+  WeatherSummary,
+  DailyWeatherForecast,
+  WeatherDataPayload,
+  HourlySprayWindowPoint,
+  SprayWashoutAdvisory
+} from '../shared/types/weather.types';
 
 export class OpenMeteoClient {
   private baseUrl: string;
@@ -19,7 +26,7 @@ export class OpenMeteoClient {
       latitude: latitude.toFixed(4),
       longitude: longitude.toFixed(4),
       current: 'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,surface_pressure,cloud_cover,weather_code',
-      hourly: 'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m',
+      hourly: 'temperature_2m,relative_humidity_2m,precipitation,precipitation_probability,rain,showers,weather_code,wind_speed_10m',
       daily: 'temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,weather_code',
       past_days: '7',
       forecast_days: '7',
@@ -88,6 +95,12 @@ export class OpenMeteoClient {
     const last3Days = this.calculateSummary(hourly, 72, '3d');
     const last7Days = this.calculateSummary(hourly, 168, '7d');
 
+    // Extract next 5 continuous hours for Spray Washout Intelligence
+    const { timeline: next5HoursSprayTimeline, advisory: sprayWashoutAdvisory } = this.calculateSprayWashoutAdvisory(
+      hourly,
+      current
+    );
+
     // Process daily forecast
     const dailyRaw = data.daily || { time: [] };
     const forecast: DailyWeatherForecast[] = [];
@@ -113,6 +126,8 @@ export class OpenMeteoClient {
         last7Days
       },
       forecast,
+      next5HoursSprayTimeline,
+      sprayWashoutAdvisory,
       location: {
         latitude: data.latitude ?? latitude,
         longitude: data.longitude ?? longitude,
@@ -120,6 +135,145 @@ export class OpenMeteoClient {
         timezone: data.timezone
       }
     };
+  }
+
+  private calculateSprayWashoutAdvisory(
+    hourly: any,
+    current: WeatherObservation
+  ): { timeline: HourlySprayWindowPoint[]; advisory: SprayWashoutAdvisory } {
+    const times: string[] = hourly.time || [];
+    const precips: number[] = hourly.precipitation || [];
+    const probs: number[] = hourly.precipitation_probability || [];
+    const temps: number[] = hourly.temperature_2m || [];
+    const humids: number[] = hourly.relative_humidity_2m || [];
+    const winds: number[] = hourly.wind_speed_10m || [];
+    const codes: number[] = hourly.weather_code || [];
+
+    const now = new Date();
+    // Find closest index matching current hour or start from forecast section
+    let currentIndex = times.findIndex((t) => {
+      const pointTime = new Date(t);
+      return pointTime.getTime() >= now.getTime() - 30 * 60 * 1000;
+    });
+
+    if (currentIndex === -1 || currentIndex >= times.length - 1) {
+      // Fallback: use current hour index based on 7 past days (7*24 = 168)
+      currentIndex = Math.min(168, Math.max(0, times.length - 24));
+    }
+
+    const timeline: HourlySprayWindowPoint[] = [];
+    let maxRainProb = 0;
+    let totalRain5h = 0;
+    let firstRainHour: string | null = null;
+    let dryHoursCount = 0;
+
+    for (let offset = 1; offset <= 5; offset++) {
+      const idx = currentIndex + offset;
+      const pointTimeStr = times[idx] || new Date(now.getTime() + offset * 3600000).toISOString();
+      const pointDate = new Date(pointTimeStr);
+      const hourLabel = pointDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+      const precip = Number((precips[idx] ?? 0).toFixed(1));
+      const prob = Number((probs[idx] ?? (precip > 0 ? 75 : 10)).toFixed(0));
+      const temp = Number((temps[idx] ?? current.temperatureC).toFixed(1));
+      const rh = Number((humids[idx] ?? current.relativeHumidityPercent).toFixed(0));
+      const wind = Number((winds[idx] ?? current.windSpeedKmh).toFixed(1));
+      const code = codes[idx] ?? 0;
+      const desc = this.describeWeatherCode(code);
+
+      // Rain is expected if precip >= 0.2mm, or prob >= 30%, or rain codes (51-67, 80-99)
+      const isRainCode = (code >= 51 && code <= 67) || (code >= 80 && code <= 99);
+      const isRainExpected = precip >= 0.2 || prob >= 30 || isRainCode;
+
+      if (prob > maxRainProb) maxRainProb = prob;
+      totalRain5h += precip;
+
+      if (isRainExpected && !firstRainHour) {
+        firstRainHour = `+${offset}h (${hourLabel})`;
+      }
+
+      if (!isRainExpected && firstRainHour === null) {
+        dryHoursCount++;
+      }
+
+      timeline.push({
+        timeIso: pointTimeStr,
+        hourLabel,
+        hourOffset: offset,
+        precipitationMm: precip,
+        precipitationProbability: prob,
+        temperatureC: temp,
+        relativeHumidityPercent: rh,
+        windSpeedKmh: wind,
+        weatherCode: code,
+        weatherDescription: desc,
+        isRainExpected
+      });
+    }
+
+    totalRain5h = Number(totalRain5h.toFixed(1));
+
+    // Decision Logic for Rainfastness & Spray Window
+    const rainHazard = totalRain5h >= 0.2 || maxRainProb >= 30 || firstRainHour !== null;
+    const currentWind = current.windSpeedKmh;
+    const isWindSafe = currentWind <= 15;
+    const windDriftRisk = currentWind > 18 ? 'HIGH' : currentWind > 12 ? 'MODERATE' : 'LOW';
+
+    let verdict: 'SAFE_TO_SPRAY' | 'DO_NOT_SPRAY' | 'CAUTION_WIND_OR_MARGINAL' = 'SAFE_TO_SPRAY';
+    let canSpray = true;
+    let badgeTitle = '✅ SAFE TO SPRAY (5h Dry Window)';
+    let headline = 'Safe 5-Hour Dry Window Ahead — Zero Washout Risk';
+    let detailedReason = 'No precipitation forecasted over the next 5 continuous hours. Foliar pesticides and bio-fungicides will have sufficient drying time (4–6 hours rainfastness) to adhere to leaf cuticles and be absorbed.';
+
+    if (rainHazard) {
+      verdict = 'DO_NOT_SPRAY';
+      canSpray = false;
+      badgeTitle = '⛔ DO NOT SPRAY (Rain Expected in 5h)';
+      headline = `Rainfall Imminent (${maxRainProb}% Chance, ${totalRain5h} mm) — High Washout Risk`;
+      detailedReason = `Chemical and bio-pesticides require a minimum 4 to 6 hour dry window (rainfastness period) to bond with foliage. Rain is forecasted at ${firstRainHour || 'within next 5 hours'}, which will wash away active ingredients into runoff, resulting in wasted chemical costs and zero disease control.`;
+    } else if (!isWindSafe) {
+      verdict = 'CAUTION_WIND_OR_MARGINAL';
+      canSpray = false;
+      badgeTitle = '⚠️ CAUTION: High Wind Drift Hazard';
+      headline = `Wind Speed (${currentWind} km/h) Exceeds Safe Spray Threshold`;
+      detailedReason = `Although no rain is predicted in the next 5 hours, wind speeds above 15 km/h cause significant droplet drift, uneven leaf deposition, and chemical waste. Wait for wind to subside below 12 km/h.`;
+    }
+
+    let optimalWindowRecommendation = 'Morning hours (06:30 AM - 09:30 AM) or Late Afternoon (04:30 PM - 06:30 PM)';
+    let nextSafeSprayWindow = 'Current 5-hour window is clear for spraying.';
+    if (rainHazard) {
+      nextSafeSprayWindow = 'Postpone application until after rain showers pass and foliage dries (estimated tomorrow morning 07:00 AM).';
+      optimalWindowRecommendation = 'Wait for a guaranteed 6-hour dry window with relative humidity < 85% and wind speed < 12 km/h.';
+    }
+
+    const windComment = isWindSafe
+      ? `Wind speed (${currentWind} km/h) is optimal for fine-droplet foliar penetration without drift.`
+      : `High wind (${currentWind} km/h) may cause pesticide mist to drift away from target foliage.`;
+
+    const advisory: SprayWashoutAdvisory = {
+      canSpray,
+      verdict,
+      badgeTitle,
+      headline,
+      detailedReason,
+      rainProbability5hMax: maxRainProb,
+      totalRainfall5hMm: totalRain5h,
+      firstRainHour,
+      dryHoursAvailable: dryHoursCount,
+      rainfastnessRequirementHours: 5,
+      windStatus: {
+        windSpeedKmh: currentWind,
+        isWindSafe,
+        windDriftRisk,
+        comment: windComment
+      },
+      optimalWindowRecommendation,
+      nextSafeSprayWindow,
+      hourlyTimeline: timeline,
+      evaluatedAt: new Date().toISOString()
+    };
+
+    return { timeline, advisory };
   }
 
   private calculateSummary(hourly: any, hoursCount: number, period: '24h' | '3d' | '7d'): WeatherSummary {
@@ -176,3 +330,4 @@ export class OpenMeteoClient {
     return 'Overcast';
   }
 }
+

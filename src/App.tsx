@@ -22,9 +22,12 @@ import {
   ExternalLink,
   ChevronRight,
   Compass,
-  Layers
+  Layers,
+  CloudRain
 } from "lucide-react";
 import { Layer2EnvironmentalIntelligence } from "./components/Layer2EnvironmentalIntelligence";
+import { SprayWashoutAdvisor } from "./components/SprayWashoutAdvisor";
+
 
 interface HealthMetrics {
   risk_score: number;
@@ -284,6 +287,17 @@ export default function App() {
               )}
             </button>
             <button
+              onClick={() => setActiveTab("spray")}
+              className={`px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 ${
+                activeTab === "spray"
+                  ? "bg-blue-50 text-blue-700 font-bold border border-blue-200"
+                  : "hover:text-blue-700 hover:bg-slate-50 text-slate-600 font-medium"
+              }`}
+            >
+              <CloudRain className="w-3.5 h-3.5 text-blue-600" />
+              Spray & Rain Radar
+            </button>
+            <button
               onClick={() => setActiveTab("layer2")}
               className={`px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 ${
                 activeTab === "layer2"
@@ -294,6 +308,7 @@ export default function App() {
               <Layers className="w-3.5 h-3.5 text-emerald-600" />
               Layer 2 Intelligence
             </button>
+
             <button
               onClick={() => setActiveTab("about")}
               className={`px-3.5 py-2 rounded-lg transition ${
@@ -515,8 +530,26 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 🌧️ 5-Hour Rain Washout & Pesticide Spray Feasibility Engine */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CloudRain className="w-5 h-5 text-blue-600" />
+                      <h3 className="text-base font-extrabold text-slate-900">
+                        Weather-Aware Pesticide Spray Feasibility
+                      </h3>
+                    </div>
+                    <span className="text-xs text-slate-500">Open-Meteo & Agromet Rain Check</span>
+                  </div>
+                  <SprayWashoutAdvisor
+                    cropName={currentResult.plant?.name || 'Crop'}
+                    diseaseName={currentResult.diagnosis?.disease || 'Foliar Pathogen'}
+                  />
+                </div>
+
                 {/* Treatments Grid */}
                 <div className="grid md:grid-cols-2 gap-6">
+
                   {/* Organic Treatments */}
                   <div className="bg-white p-6 rounded-2xl border border-emerald-100 shadow-2xs">
                     <div className="flex items-center gap-2 mb-4">
@@ -953,8 +986,35 @@ export default function App() {
           </div>
         )}
 
+        {/* ================= SPRAY ADVISOR & RAIN RADAR TAB ================= */}
+        {activeTab === "spray" && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold shadow-xs">
+                    <CloudRain className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900">5-Hour Spray Feasibility & District Rain Alerts</h2>
+                    <p className="text-xs text-slate-500">
+                      Prevents chemical washout by combining Open-Meteo 5-hour precipitation forecast and official Agromet district bulletins.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <SprayWashoutAdvisor
+                cropName={currentResult?.plant?.name || 'Field Crops'}
+                diseaseName={currentResult?.diagnosis?.disease || 'Foliar Pathogens'}
+              />
+            </div>
+          </div>
+        )}
+
         {/* ================= LAYER 2 TAB ================= */}
         {activeTab === "layer2" && (
+
           <div className="space-y-6">
             <Layer2EnvironmentalIntelligence currentDiagnosis={currentResult} />
           </div>
