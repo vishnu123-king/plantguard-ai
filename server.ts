@@ -182,11 +182,12 @@ Return a JSON object ONLY matching this exact JSON structure:
   "prevention": ["Agronomic prevention measure 1", "Agronomic prevention measure 2"]
 }`;
 
-        // Standard Gemini vision models according to SKILL.md guidelines
+        // Standard Gemini vision models according to official API recommendations
         const candidateModels = [
+          "gemini-3.6-flash",
           "gemini-3.7-flash",
-          "gemini-flash-latest",
-          "gemini-2.5-flash"
+          "gemini-3.6-pro",
+          "gemini-3.7-pro"
         ];
         let response: any = null;
         let lastError: any = null;
