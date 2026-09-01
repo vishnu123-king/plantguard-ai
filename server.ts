@@ -182,12 +182,11 @@ Return a JSON object ONLY matching this exact JSON structure:
   "prevention": ["Agronomic prevention measure 1", "Agronomic prevention measure 2"]
 }`;
 
-        // Modern Gemini vision models with priority order and fallback
+        // Standard Gemini vision models according to SKILL.md guidelines
         const candidateModels = [
-          "gemini-2.5-flash",
           "gemini-3.7-flash",
-          "gemini-2.5-pro",
-          "gemini-flash-latest"
+          "gemini-flash-latest",
+          "gemini-2.5-flash"
         ];
         let response: any = null;
         let lastError: any = null;
@@ -200,19 +199,19 @@ Return a JSON object ONLY matching this exact JSON structure:
           while (attempts < maxAttempts) {
             try {
               attempts++;
+              const imagePart = {
+                inlineData: {
+                  mimeType: mimeType,
+                  data: base64Image
+                }
+              };
+              const textPart = {
+                text: prompt
+              };
+
               response = await ai.models.generateContent({
                 model: modelName,
-                contents: [
-                  {
-                    inlineData: {
-                      mimeType: mimeType,
-                      data: base64Image
-                    }
-                  },
-                  {
-                    text: prompt
-                  }
-                ],
+                contents: { parts: [imagePart, textPart] },
                 config: {
                   responseMimeType: "application/json"
                 }
@@ -229,7 +228,7 @@ Return a JSON object ONLY matching this exact JSON structure:
                 await new Promise((resolve) => setTimeout(resolve, 800));
                 continue;
               }
-              // If model not found or persistent 503, immediately try the next model in candidate list
+              // Switch to next model in candidate list
               break;
             }
           }
@@ -268,8 +267,9 @@ Return a JSON object ONLY matching this exact JSON structure:
           geminiSuccess = true;
           console.log(`Gemini Vision AI successfully diagnosed leaf as ${plantName} - ${diseaseName}`);
         }
-      } catch (err) {
-        console.error("Gemini Vision AI error, falling back to rule-based engine:", err);
+      } catch (err: any) {
+        const errMsg = err?.message || err?.status || "API call failed";
+        console.warn(`[Gemini Vision AI] API notice (${errMsg}). Gracefully switching to plant-disease rule-based diagnostic engine.`);
       }
     }
 
