@@ -87,6 +87,10 @@ export interface DistrictWeatherNewsAlert {
   bulletinText: string;
   source: string;
   issuedAt: string;
+  bulletinCode?: string;
+  agroClimateZone?: string;
+  stationName?: string;
+  diseasePressureAdvisory?: string;
   rainForecastSummary: string;
   sprayRecommendation: string;
   fieldDrainageAdvisory?: string;

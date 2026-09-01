@@ -34,7 +34,10 @@ interface SprayWashoutAdvisorProps {
 
 // Preset regions for rapid testing of lat/long and district news
 const PRESET_LOCATIONS = [
+  { name: 'Karur / Aravakurichi, TN', lat: 10.7667, lon: 77.9167 },
   { name: 'Coimbatore, TN', lat: 11.0168, lon: 76.9558 },
+  { name: 'Dindigul, TN', lat: 10.3673, lon: 77.9803 },
+  { name: 'Salem, TN', lat: 11.6643, lon: 78.1460 },
   { name: 'Nashik, MH', lat: 19.9975, lon: 73.7898 },
   { name: 'Shimla, HP', lat: 31.1048, lon: 77.1734 },
   { name: 'Guntur, AP', lat: 16.3067, lon: 80.4365 },
@@ -198,11 +201,15 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
           alertColor: '#F97316',
           headline: `IMD Agromet Advisory: Convective Rain Showers Active in ${activeDistrict} District`,
           bulletinText: `Regional Meteorological Centre issues a heavy rain & thunderstorm watch for ${activeDistrict} District (${activeState}). Active cloud bands moving across ${activeLocality}. Soil moisture approaching saturation.`,
-          source: 'India Meteorological Department (IMD) Agromet Bulletin',
+          source: 'India Meteorological Department (IMD) / Gramin Krishi Mausam Sewa (GKMS)',
           issuedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          bulletinCode: `IMD/GKMS-SIM/RAIN-01`,
+          agroClimateZone: fetchedDistrictAlert?.agroClimateZone || 'Semi-Arid Agro Zone',
+          stationName: fetchedDistrictAlert?.stationName || 'Regional Agromet Field Advisory Unit',
+          diseasePressureAdvisory: '🌧️ HIGH BLIGHT & ROT INOCULUM RISK: Wet canopy triggers rapid fungal spore germination. Delay all foliar chemicals until 5+ hours of dry weather.',
           rainForecastSummary: `85-95% probability of moderate to heavy rain showers over ${activeDistrict} in the next 2-5 hours.`,
           sprayRecommendation: `⛔ STRICT ADVISORY: Immediately suspend all foliar pesticide & fungicide sprays in ${activeDistrict}. Rain will wash off chemicals.`,
-          fieldDrainageAdvisory: 'Clear field channels to prevent water stagnation.'
+          fieldDrainageAdvisory: 'Clear field drainage channels to prevent water stagnation and root rot.'
         });
         setLoading(false);
         setLastRefreshed(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -258,8 +265,12 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
           alertColor: '#10B981',
           headline: `District Agro-Met Bulletin (${activeDistrict}): Dry Weather & Stable Atmospheric Conditions`,
           bulletinText: `Gramin Krishi Mausam Sewa confirms fair, stable weather across ${activeDistrict} District (${activeState}). Low humidity and mild breeze favor agricultural operations in ${activeLocality}.`,
-          source: 'IMD / GKMS Agromet Advisory Division',
+          source: 'India Meteorological Department (IMD) / Gramin Krishi Mausam Sewa (GKMS)',
           issuedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          bulletinCode: `IMD/GKMS-SIM/DRY-01`,
+          agroClimateZone: fetchedDistrictAlert?.agroClimateZone || 'Semi-Arid Agro Zone',
+          stationName: fetchedDistrictAlert?.stationName || 'Regional Agromet Field Advisory Unit',
+          diseasePressureAdvisory: '☀️ OPTIMAL CONDITIONS: Low fungal pressure. Ideal window for preventive biologicals and protective chemical barriers.',
           rainForecastSummary: `No rain expected in ${activeDistrict} over the next 24 to 48 hours.`,
           sprayRecommendation: `✅ OPTIMAL CONDITIONS: Proceed with scheduled crop protection and bio-fungicide sprays in ${activeDistrict}.`,
           fieldDrainageAdvisory: 'Maintain routine irrigation to protect soil root moisture.'
@@ -697,24 +708,38 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
       {/* METHOD 2: GPS District Identification & Official Meteorological Rain News Alert */}
       {districtAlert && (
         <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 shadow-2xs">
-          <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                <Newspaper className="w-4 h-4" />
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-3 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                <Newspaper className="w-4.5 h-4.5" />
               </div>
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Method 2: GPS District Meteorological & Agromet Bulletins (IMD / GKMS)
-                </span>
-                <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-rose-400" />
-                  {districtAlert.district} District, {districtAlert.state}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Method 2: GPS District Meteorological & Agromet Bulletins (IMD / GKMS)
+                  </span>
+                  {districtAlert.bulletinCode && (
+                    <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-400">
+                      {districtAlert.bulletinCode}
+                    </span>
+                  )}
+                </div>
+                <h4 className="text-base font-bold text-white flex items-center gap-1.5 mt-0.5">
+                  <MapPin className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>
+                    {districtAlert.locality ? `${districtAlert.locality}, ` : ''}{districtAlert.district} District, {districtAlert.state}
+                  </span>
                 </h4>
+                {districtAlert.agroClimateZone && (
+                  <p className="text-[11px] text-slate-400">
+                    Zone: <strong className="text-slate-300">{districtAlert.agroClimateZone}</strong> • Station: <span className="text-emerald-400">{districtAlert.stationName || 'Regional Agromet Centre'}</span>
+                  </p>
+                )}
               </div>
             </div>
 
             <span
-              className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider border ${
+              className={`text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wider border ${
                 districtAlert.alertLevel === 'ORANGE_ALERT' || districtAlert.alertLevel === 'RED_WARNING'
                   ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                   : districtAlert.alertLevel === 'YELLOW_WATCH'
@@ -726,31 +751,48 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
             </span>
           </div>
 
-          <div className="space-y-2.5 text-xs">
+          <div className="space-y-3 text-xs">
             <div className="font-bold text-white text-sm">{districtAlert.headline}</div>
-            <p className="text-slate-300 leading-relaxed bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
+            
+            <p className="text-slate-300 leading-relaxed bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80">
               {districtAlert.bulletinText}
             </p>
 
-            <div className="grid sm:grid-cols-2 gap-2.5 pt-1">
-              <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  District Rainfall Forecast
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  District Rainfall & Washout Risk Forecast
                 </span>
-                <p className="text-slate-300 text-xs">{districtAlert.rainForecastSummary}</p>
+                <p className="text-slate-200 text-xs leading-relaxed">{districtAlert.rainForecastSummary}</p>
               </div>
 
-              <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Agronomic Spray Advice
+              <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-xl space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Agronomic Foliar Spray Directive
                 </span>
-                <p className="text-slate-300 text-xs">{districtAlert.sprayRecommendation}</p>
+                <p className="text-slate-200 text-xs leading-relaxed">{districtAlert.sprayRecommendation}</p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-2 border-t border-slate-800/80">
-              <span>Source: {districtAlert.source}</span>
-              <span>Issued: {districtAlert.issuedAt}</span>
+            {districtAlert.diseasePressureAdvisory && (
+              <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-xl text-amber-200 text-xs leading-relaxed">
+                <span className="text-[10px] font-bold uppercase tracking-wider block text-amber-400 mb-0.5">
+                  Pathogen & Fungal Proliferation Advisory:
+                </span>
+                {districtAlert.diseasePressureAdvisory}
+              </div>
+            )}
+
+            {districtAlert.fieldDrainageAdvisory && (
+              <div className="p-3 bg-slate-900/50 border border-slate-800/60 rounded-xl text-slate-300 text-xs">
+                <strong className="text-slate-200">Field Soil Drainage & Moisture Management: </strong>
+                {districtAlert.fieldDrainageAdvisory}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between text-[10px] text-slate-400 pt-2 border-t border-slate-800/80 gap-2">
+              <span><strong>Issuing Authority:</strong> {districtAlert.source}</span>
+              <span><strong>Advisory Issued:</strong> {districtAlert.issuedAt}</span>
             </div>
           </div>
         </div>

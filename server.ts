@@ -153,7 +153,14 @@ app.post("/api/diagnose", upload.single("image"), async (req, res) => {
     const apiKey = process.env.GEMINI_API_KEY || process.env.AI_API_KEY;
     if (apiKey) {
       try {
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build'
+            }
+          }
+        });
         const base64Image = file.buffer.toString("base64");
         const mimeType = file.mimetype || "image/jpeg";
         
@@ -174,8 +181,8 @@ Return a JSON object ONLY matching this exact JSON structure:
   "prevention": ["Agronomic prevention measure 1", "Agronomic prevention measure 2"]
 }`;
 
-        // Use current recommended models
-        const candidateModels = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+        // Use valid modern Gemini models
+        const candidateModels = ["gemini-3.7-flash", "gemini-2.5-flash", "gemini-flash-latest"];
         let response: any = null;
         let lastError: any = null;
 
@@ -190,7 +197,9 @@ Return a JSON object ONLY matching this exact JSON structure:
                     data: base64Image
                   }
                 },
-                prompt
+                {
+                  text: prompt
+                }
               ],
               config: {
                 responseMimeType: "application/json"
