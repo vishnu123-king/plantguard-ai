@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   CloudRain,
   Sun,
-  Wind,
-  ShieldAlert,
-  CheckCircle2,
   AlertTriangle,
-  Clock,
+  CheckCircle2,
+  Wind,
   Droplets,
+  Clock,
   MapPin,
   RefreshCw,
   Info,
@@ -19,8 +18,8 @@ import {
   Check
 } from 'lucide-react';
 import {
-  SprayWashoutAdvisory,
   HourlySprayWindowPoint,
+  SprayWashoutAdvisory,
   DistrictWeatherNewsAlert
 } from '../shared/types/weather.types';
 import { MobileLocationService } from '../mobile/location.service';
@@ -33,11 +32,21 @@ interface SprayWashoutAdvisorProps {
   compact?: boolean;
 }
 
+// Preset regions for rapid testing of lat/long and district news
+const PRESET_LOCATIONS = [
+  { name: 'Coimbatore, TN', lat: 11.0168, lon: 76.9558 },
+  { name: 'Nashik, MH', lat: 19.9975, lon: 73.7898 },
+  { name: 'Shimla, HP', lat: 31.1048, lon: 77.1734 },
+  { name: 'Guntur, AP', lat: 16.3067, lon: 80.4365 },
+  { name: 'Ludhiana, PB', lat: 30.9010, lon: 75.8573 },
+  { name: 'Bengaluru, KA', lat: 12.9716, lon: 77.5946 }
+];
+
 export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
   latitude = 11.0168,
   longitude = 76.9558,
-  cropName = 'Crop',
-  diseaseName = 'Foliar Disease',
+  cropName = 'Tomato',
+  diseaseName = 'Early Blight',
   compact = false
 }) => {
   const [loading, setLoading] = useState<boolean>(true);
@@ -59,11 +68,34 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
   const [simulationMode, setSimulationMode] = useState<'live' | 'rain_simulation' | 'dry_simulation'>('live');
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
 
-  const fetchSprayData = async (lat: number, lon: number, mode: string = simulationMode) => {
+  const fetchSprayData = async (
+    lat: number,
+    lon: number,
+    mode: 'live' | 'rain_simulation' | 'dry_simulation' = 'live'
+  ) => {
     setLoading(true);
+
     try {
+      // 1. Fetch real Open-Meteo & District news first to get accurate geocoding
+      const res = await fetch(`/api/v1/spray-advisor?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`);
+      let fetchedAdvisory: SprayWashoutAdvisory | null = null;
+      let fetchedDistrictAlert: DistrictWeatherNewsAlert | null = null;
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.sprayWashoutAdvisory) {
+          fetchedAdvisory = data.sprayWashoutAdvisory;
+        }
+        if (data.districtNewsAlert) {
+          fetchedDistrictAlert = data.districtNewsAlert;
+        }
+      }
+
+      const activeDistrict = fetchedDistrictAlert?.district || 'Local Agricultural';
+      const activeState = fetchedDistrictAlert?.state || 'Agro Zone';
+      const activeLocality = fetchedDistrictAlert?.locality || `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
+
       if (mode === 'rain_simulation') {
-        // High rain simulation scenario for demonstration
         const now = new Date();
         const simTimeline: HourlySprayWindowPoint[] = [
           {
@@ -71,10 +103,10 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
             hourLabel: new Date(now.getTime() + 3600000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
             hourOffset: 1,
             precipitationMm: 0.0,
-            precipitationProbability: 20,
+            precipitationProbability: 15,
             temperatureC: 27.5,
-            relativeHumidityPercent: 78,
-            windSpeedKmh: 9.0,
+            relativeHumidityPercent: 70,
+            windSpeedKmh: 8.5,
             weatherCode: 2,
             weatherDescription: 'Partly cloudy',
             isRainExpected: false
@@ -84,12 +116,12 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
             hourLabel: new Date(now.getTime() + 7200000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
             hourOffset: 2,
             precipitationMm: 2.8,
-            precipitationProbability: 85,
+            precipitationProbability: 80,
             temperatureC: 25.0,
-            relativeHumidityPercent: 89,
+            relativeHumidityPercent: 88,
             windSpeedKmh: 14.5,
             weatherCode: 63,
-            weatherDescription: 'Moderate rain showers',
+            weatherDescription: 'Moderate rain',
             isRainExpected: true
           },
           {
@@ -157,19 +189,20 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
         });
 
         setDistrictAlert({
-          district: 'Coimbatore',
-          state: 'Tamil Nadu',
+          district: activeDistrict,
+          state: activeState,
           country: 'India',
-          locality: 'Agro Meteorological Zone',
+          locality: activeLocality,
           coordinates: { latitude: lat, longitude: lon },
           alertLevel: 'ORANGE_ALERT',
           alertColor: '#F97316',
-          headline: 'IMD Agromet Advisory: Convective Rain Showers Active in District',
-          bulletinText: `Regional Meteorological Centre issues a heavy rain & thunderstorm watch for Coimbatore District. Active cloud bands moving northeast. Soil moisture approaching saturation.`,
+          headline: `IMD Agromet Advisory: Convective Rain Showers Active in ${activeDistrict} District`,
+          bulletinText: `Regional Meteorological Centre issues a heavy rain & thunderstorm watch for ${activeDistrict} District (${activeState}). Active cloud bands moving across ${activeLocality}. Soil moisture approaching saturation.`,
           source: 'India Meteorological Department (IMD) Agromet Bulletin',
           issuedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          rainForecastSummary: '85-95% probability of moderate to heavy rain showers over the next 2-5 hours.',
-          sprayRecommendation: '⛔ STRICT ADVISORY: Immediately suspend all foliar pesticide & fungicide sprays. Rain will wash off chemicals.'
+          rainForecastSummary: `85-95% probability of moderate to heavy rain showers over ${activeDistrict} in the next 2-5 hours.`,
+          sprayRecommendation: `⛔ STRICT ADVISORY: Immediately suspend all foliar pesticide & fungicide sprays in ${activeDistrict}. Rain will wash off chemicals.`,
+          fieldDrainageAdvisory: 'Clear field channels to prevent water stagnation.'
         });
         setLoading(false);
         setLastRefreshed(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -177,7 +210,6 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
       }
 
       if (mode === 'dry_simulation') {
-        // Clear dry window simulation
         const now = new Date();
         const simTimeline: HourlySprayWindowPoint[] = [1, 2, 3, 4, 5].map((h) => ({
           timeIso: new Date(now.getTime() + h * 3600000).toISOString(),
@@ -194,7 +226,7 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
         }));
 
         setAdvisory({
-          canSpray: false ? false : true,
+          canSpray: true,
           verdict: 'SAFE_TO_SPRAY',
           badgeTitle: '✅ SAFE TO SPRAY (5h Dry Window Confirmed)',
           headline: 'Optimal Spray Window Active: 0% Rain Probability in Next 5 Hours',
@@ -217,39 +249,36 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
         });
 
         setDistrictAlert({
-          district: 'Coimbatore',
-          state: 'Tamil Nadu',
+          district: activeDistrict,
+          state: activeState,
           country: 'India',
-          locality: 'Field Coordinates Zone',
+          locality: activeLocality,
           coordinates: { latitude: lat, longitude: lon },
           alertLevel: 'GREEN_CLEAR',
           alertColor: '#10B981',
-          headline: 'District Agro-Met Bulletin: Dry Weather & Stable Atmospheric Conditions',
-          bulletinText: `Gramin Krishi Mausam Sewa confirms fair, stable weather across the district. Low humidity and mild breeze favor agricultural operations.`,
+          headline: `District Agro-Met Bulletin (${activeDistrict}): Dry Weather & Stable Atmospheric Conditions`,
+          bulletinText: `Gramin Krishi Mausam Sewa confirms fair, stable weather across ${activeDistrict} District (${activeState}). Low humidity and mild breeze favor agricultural operations in ${activeLocality}.`,
           source: 'IMD / GKMS Agromet Advisory Division',
           issuedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          rainForecastSummary: 'No rain expected in the district over the next 24 to 48 hours.',
-          sprayRecommendation: '✅ OPTIMAL CONDITIONS: Proceed with scheduled crop protection and bio-fungicide sprays.'
+          rainForecastSummary: `No rain expected in ${activeDistrict} over the next 24 to 48 hours.`,
+          sprayRecommendation: `✅ OPTIMAL CONDITIONS: Proceed with scheduled crop protection and bio-fungicide sprays in ${activeDistrict}.`,
+          fieldDrainageAdvisory: 'Maintain routine irrigation to protect soil root moisture.'
         });
         setLoading(false);
         setLastRefreshed(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         return;
       }
 
-      // Live Open-Meteo & District News Backend API Call
-      const res = await fetch(`/api/v1/spray-advisor?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.sprayWashoutAdvisory) {
-          setAdvisory(data.sprayWashoutAdvisory);
-        }
-        if (data.districtNewsAlert) {
-          setDistrictAlert(data.districtNewsAlert);
-        }
+      // Live Mode: apply real data
+      if (fetchedAdvisory) {
+        setAdvisory(fetchedAdvisory);
+      }
+      if (fetchedDistrictAlert) {
+        setDistrictAlert(fetchedDistrictAlert);
       }
       setLastRefreshed(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
-      console.error('Failed to load spray advisor telemetry:', err);
+      console.warn('Could not fetch spray advisor data:', err);
     } finally {
       setLoading(false);
     }
@@ -291,6 +320,17 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
     }
   };
 
+  const handleSelectPreset = (preset: { name: string; lat: number; lon: number }) => {
+    setCurrentLat(preset.lat);
+    setCurrentLon(preset.lon);
+    setInputLat(preset.lat.toFixed(6));
+    setInputLon(preset.lon.toFixed(6));
+    MobileLocationService.saveCoordinates({ latitude: preset.lat, longitude: preset.lon, accuracyM: 5.0 });
+    setCoordSource('saved_custom');
+    fetchSprayData(preset.lat, preset.lon, 'live');
+    setSimulationMode('live');
+  };
+
   const isDoNotSpray = advisory?.verdict === 'DO_NOT_SPRAY';
   const isCaution = advisory?.verdict === 'CAUTION_WIND_OR_MARGINAL';
   const isSafe = advisory?.verdict === 'SAFE_TO_SPRAY';
@@ -313,7 +353,7 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-slate-400">
-              {districtAlert ? `${districtAlert.district} District, ${districtAlert.state}` : 'Synchronized with Open-Meteo microclimate telemetry'}
+              {districtAlert ? `${districtAlert.district} District, ${districtAlert.state}` : 'Synchronizing with Open-Meteo & Agromet telemetry...'}
             </p>
           </div>
         </div>
@@ -335,6 +375,24 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
             {isGpsDetecting ? 'Acquiring GPS...' : '📍 Auto-Detect GPS'}
           </button>
         </div>
+      </div>
+
+      {/* Quick Regional Presets for Instant Lat/Lng Switching */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px]">
+        <span className="text-slate-400 text-[10px] uppercase font-semibold shrink-0">Quick District Presets:</span>
+        {PRESET_LOCATIONS.map((p) => (
+          <button
+            key={p.name}
+            onClick={() => handleSelectPreset(p)}
+            className={`px-2.5 py-1 rounded-md border font-medium whitespace-nowrap transition ${
+              Math.abs(currentLat - p.lat) < 0.05 && Math.abs(currentLon - p.lon) < 0.05
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+            }`}
+          >
+            {p.name}
+          </button>
+        ))}
       </div>
 
       {/* Expandable Manual Lat/Lng Input (Google Maps compatible) */}
@@ -396,7 +454,7 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
         </div>
       )}
 
-      {/* Primary 5-Hour Spray Feasibility Card */}
+      {/* METHOD 1: Primary 5-Hour Open-Meteo Spray Feasibility Card */}
       <div
         className={`rounded-2xl p-5 border shadow-sm transition-all ${
           isDoNotSpray
@@ -429,7 +487,7 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  Open-Meteo Spray Washout Engine
+                  Method 1: Open-Meteo 5-Hour Rainfall Lookahead
                 </span>
                 <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 text-slate-300 font-mono">
                   <Clock className="w-3 h-3 text-emerald-400" /> 5-Hour Lookahead
@@ -450,15 +508,9 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button
-              onClick={handleUseGpsLocation}
-              disabled={isGpsDetecting}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-medium transition"
-              title="Use Device GPS"
-            >
-              <Compass className={`w-3 h-3 text-emerald-400 ${isGpsDetecting ? 'animate-spin' : ''}`} />
-              {isGpsDetecting ? 'Detecting...' : 'My GPS'}
-            </button>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {lastRefreshed ? `Updated: ${lastRefreshed}` : ''}
+            </span>
           </div>
         </div>
 
@@ -532,9 +584,9 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
         <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3.5 mb-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-emerald-400" /> Hourly Rain & Spray Risk Radar
+              <Clock className="w-3.5 h-3.5 text-emerald-400" /> Hourly Rain & Spray Risk Radar (Target Location Time)
             </span>
-            <span className="text-[10px] text-slate-400">Min. Rainfastness Required: 4–6 hrs</span>
+            <span className="text-[10px] text-slate-400">Min. Rainfastness: 4–6 hrs</span>
           </div>
 
           <div className="grid grid-cols-5 gap-2">
@@ -652,7 +704,7 @@ export const SprayWashoutAdvisor: React.FC<SprayWashoutAdvisorProps> = ({
               </div>
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Method 2: GPS District Weather Bulletin
+                  Method 2: GPS District Meteorological & Agromet Bulletins (IMD / GKMS)
                 </span>
                 <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-rose-400" />

@@ -96,9 +96,11 @@ export class OpenMeteoClient {
     const last7Days = this.calculateSummary(hourly, 168, '7d');
 
     // Extract next 5 continuous hours for Spray Washout Intelligence
+    const rawCurrentTime = currentRaw.time;
     const { timeline: next5HoursSprayTimeline, advisory: sprayWashoutAdvisory } = this.calculateSprayWashoutAdvisory(
       hourly,
-      current
+      current,
+      rawCurrentTime
     );
 
     // Process daily forecast
@@ -139,7 +141,8 @@ export class OpenMeteoClient {
 
   private calculateSprayWashoutAdvisory(
     hourly: any,
-    current: WeatherObservation
+    current: WeatherObservation,
+    rawCurrentTime?: string
   ): { timeline: HourlySprayWindowPoint[]; advisory: SprayWashoutAdvisory } {
     const times: string[] = hourly.time || [];
     const precips: number[] = hourly.precipitation || [];
@@ -149,15 +152,23 @@ export class OpenMeteoClient {
     const winds: number[] = hourly.wind_speed_10m || [];
     const codes: number[] = hourly.weather_code || [];
 
-    const now = new Date();
-    // Find closest index matching current hour or start from forecast section
-    let currentIndex = times.findIndex((t) => {
-      const pointTime = new Date(t);
-      return pointTime.getTime() >= now.getTime() - 30 * 60 * 1000;
-    });
+    // Pinpoint current local index in target timezone using current.time
+    let currentIndex = -1;
+    if (rawCurrentTime && typeof rawCurrentTime === 'string') {
+      const matchPrefix = rawCurrentTime.substring(0, 13); // e.g. "2026-09-01T20"
+      currentIndex = times.findIndex((t) => typeof t === 'string' && t.startsWith(matchPrefix));
+    }
 
-    if (currentIndex === -1 || currentIndex >= times.length - 1) {
-      // Fallback: use current hour index based on 7 past days (7*24 = 168)
+    if (currentIndex === -1) {
+      const now = new Date();
+      currentIndex = times.findIndex((t) => {
+        const pointTime = new Date(t);
+        return pointTime.getTime() >= now.getTime() - 30 * 60 * 1000;
+      });
+    }
+
+    if (currentIndex === -1 || currentIndex >= times.length - 5) {
+      // Fallback: start 7 days in or 24h before the end
       currentIndex = Math.min(168, Math.max(0, times.length - 24));
     }
 
@@ -169,9 +180,18 @@ export class OpenMeteoClient {
 
     for (let offset = 1; offset <= 5; offset++) {
       const idx = currentIndex + offset;
-      const pointTimeStr = times[idx] || new Date(now.getTime() + offset * 3600000).toISOString();
-      const pointDate = new Date(pointTimeStr);
-      const hourLabel = pointDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+      const pointTimeStr = times[idx] || '';
+      
+      // Compute human readable local hour label cleanly
+      let hourLabel = `+${offset}h`;
+      if (pointTimeStr && pointTimeStr.length >= 13) {
+        const hourNum = parseInt(pointTimeStr.substring(11, 13), 10);
+        if (!isNaN(hourNum)) {
+          const ampm = hourNum >= 12 ? 'PM' : 'AM';
+          const hour12 = hourNum % 12 || 12;
+          hourLabel = `${hour12.toString().padStart(2, '0')}:00 ${ampm}`;
+        }
+      }
 
       const precip = Number((precips[idx] ?? 0).toFixed(1));
       const prob = Number((probs[idx] ?? (precip > 0 ? 75 : 10)).toFixed(0));

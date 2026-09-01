@@ -514,7 +514,10 @@ app.get("/api/v1/spray-advisor", async (req, res) => {
     const lon = parseFloat(req.query.lon as string) || 76.9558;
 
     const weatherData = await weatherService.getWeatherData(lat, lon);
-    const districtAlert = await districtNewsService.getDistrictNewsAlert(lat, lon, weatherData.current);
+    const districtAlert = await districtNewsService.getDistrictNewsAlert(lat, lon, {
+      ...weatherData.current,
+      rainProbability5hMax: weatherData.sprayWashoutAdvisory?.rainProbability5hMax || 0
+    });
 
     res.json({
       location: {
