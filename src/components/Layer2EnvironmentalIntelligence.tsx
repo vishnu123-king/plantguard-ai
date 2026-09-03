@@ -208,6 +208,89 @@ export const Layer2EnvironmentalIntelligence: React.FC<Layer2Props> = ({ current
   const history24h = envProfile?.weather.historical?.last24Hours;
   const soil = envProfile?.soil;
 
+  const getSevenDayRiskForecast = () => {
+    // If the server-side analysis already has computed the forecast, prefer that
+    if (enhancedAnalysis?.riskEvaluation?.forecast) {
+      return enhancedAnalysis.riskEvaluation.forecast;
+    }
+
+    const forecastList = envProfile?.weather?.forecast;
+    if (!forecastList || forecastList.length === 0) {
+      return null;
+    }
+
+    const detectedCrop = selectedFarm?.cropType || currentDiagnosis?.plant_name || 'Tomato';
+    const isHealthy = currentDiagnosis ? (currentDiagnosis.disease_name?.toLowerCase().includes('healthy') || currentDiagnosis.health_status === 'HEALTHY' || (currentDiagnosis.plant_name && currentDiagnosis.disease_name === 'Healthy')) : true;
+    const diseaseName = currentDiagnosis?.disease_name || 'Foliar Pathogen';
+    const isPest = currentDiagnosis?.disease_name?.toLowerCase().includes('pest') || diseaseName.toLowerCase().includes('pest') || diseaseName.toLowerCase().includes('mite') || diseaseName.toLowerCase().includes('aphid') || diseaseName.toLowerCase().includes('worm');
+
+    return forecastList.slice(0, 7).map((f, index) => {
+      let dayLabel = `Day ${index + 1}`;
+      if (index === 0) dayLabel = 'Today';
+      else if (index === 1) dayLabel = 'Tomorrow';
+      else if (index === 2) dayLabel = 'Day 3';
+      else if (index === 3) dayLabel = 'Day 4';
+      else if (index === 4) dayLabel = 'Day 5';
+      else if (index === 5) dayLabel = 'Day 6';
+      else if (index === 6) dayLabel = 'Day 7';
+
+      // Base score calculation
+      let baseScore = isHealthy ? 18 : 50;
+      if (isPest) baseScore = 45;
+
+      const tempMax = f.temperatureMaxC;
+      const rainSum = f.precipitationSumMm;
+      const rainProb = f.precipitationProbabilityPercent ?? 20;
+
+      // Temp impact
+      if (tempMax >= 22 && tempMax <= 28) {
+        baseScore += 15;
+      } else if (tempMax >= 18 && tempMax <= 32) {
+        baseScore += 8;
+      }
+
+      // Moisture impact
+      if (rainSum >= 5 || rainProb >= 65) {
+        baseScore += 22;
+      } else if (rainSum >= 1 || rainProb >= 35) {
+        baseScore += 10;
+      }
+
+      // Pest condition
+      if (isPest && rainSum < 1 && tempMax >= 26) {
+        baseScore += 15;
+      }
+
+      const finalScore = Math.min(95, Math.max(12, baseScore));
+
+      let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' = 'LOW';
+      if (finalScore >= 70) {
+        riskLevel = 'HIGH';
+      } else if (finalScore >= 40) {
+        riskLevel = 'MODERATE';
+      }
+
+      // Construct explanation matching requested pattern: "Risk is elevated due to recent rainfall and favorable environmental conditions."
+      let explanation = 'Risk remains low due to unfavorable microclimate parameters and clear weather.';
+      if (riskLevel === 'HIGH') {
+        explanation = `Risk is elevated due to forecasted rain of ${rainSum}mm and optimal crop temperature of ${tempMax}°C.`;
+      } else if (riskLevel === 'MODERATE') {
+        explanation = `Risk is moderate due to elevated humidity probability (${rainProb}%) and conducive climate.`;
+      }
+
+      return {
+        dayLabel,
+        dateStr: f.date,
+        riskLevel,
+        riskScore: finalScore,
+        explanation,
+        temperatureMaxC: tempMax,
+        precipitationSumMm: rainSum,
+        precipitationProbabilityPercent: rainProb
+      };
+    });
+  };
+
   return (
     <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl text-slate-100 mt-10">
       {/* Header */}
@@ -410,6 +493,125 @@ export const Layer2EnvironmentalIntelligence: React.FC<Layer2Props> = ({ current
               </div>
             </div>
 
+            {/* 🔮 7-Day Crop Disease & Pest Risk Forecast Card */}
+            <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-6 shadow-xl">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 mb-5">
+                <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                  <span className="text-emerald-400">🔮</span> 7-DAY CROP RISK
+                </h4>
+                <span className="text-xs text-slate-400 font-mono">Physiological Threat Projection</span>
+              </div>
+
+              {(() => {
+                const forecast = getSevenDayRiskForecast();
+                if (!forecast || forecast.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-amber-500 font-semibold bg-slate-900/40 rounded-xl border border-slate-800">
+                      ⚠️ Forecast unavailable
+                    </div>
+                  );
+                }
+
+                // Check overall conditions to present a highly descriptive and dynamic explanation
+                const hasHighRisk = forecast.some(f => f.riskLevel === 'HIGH');
+                const hasModerateRisk = forecast.some(f => f.riskLevel === 'MODERATE');
+                const overallExplanation = hasHighRisk
+                  ? "Risk is elevated due to recent rainfall and favorable environmental conditions."
+                  : hasModerateRisk
+                  ? "Risk is moderate. Elevated humidity probability and warm temperatures create slightly conducive conditions."
+                  : "Risk remains low due to stable dry weather parameters and clean atmospheric skies.";
+
+                return (
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left: 7 Days List */}
+                    <div className="lg:col-span-5 space-y-2.5">
+                      {forecast.map((f, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between p-3 bg-slate-900/60 rounded-xl border border-slate-800/40 hover:border-slate-800 transition"
+                        >
+                          <span className="text-sm font-semibold text-slate-300">{f.dayLabel}</span>
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-xs font-mono text-slate-500">{f.temperatureMaxC}°C | 🌧 {f.precipitationSumMm}mm</span>
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold uppercase border ${
+                              f.riskLevel === 'HIGH'
+                                ? 'bg-rose-950/80 text-rose-400 border-rose-800/60'
+                                : f.riskLevel === 'MODERATE'
+                                ? 'bg-amber-950/80 text-amber-400 border-amber-800/60'
+                                : 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${
+                                f.riskLevel === 'HIGH' ? 'bg-rose-500 animate-pulse' : f.riskLevel === 'MODERATE' ? 'bg-amber-500' : 'bg-emerald-500'
+                              }`} />
+                              {f.riskLevel}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Right: Trend Curve & Explanation */}
+                    <div className="lg:col-span-7 flex flex-col justify-between bg-slate-900/40 p-5 rounded-xl border border-slate-800/40">
+                      <div className="space-y-4">
+                        {/* Explanation block */}
+                        <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800/60">
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block mb-1">
+                            AI-Assisted Outlook Explanation
+                          </span>
+                          <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                            {overallExplanation}
+                          </p>
+                        </div>
+
+                        {/* Interactive Graph Curve */}
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2.5">
+                            Threat Progression Curve
+                          </span>
+                          <div className="h-28 flex items-end justify-between gap-2 bg-slate-950/60 px-4 pt-6 pb-2 rounded-xl border border-slate-800/80 relative">
+                            {/* Grid markers */}
+                            <div className="absolute top-4 left-0 right-0 border-t border-slate-800/20 pointer-events-none" />
+                            <div className="absolute top-12 left-0 right-0 border-t border-slate-800/20 pointer-events-none" />
+                            <div className="absolute top-20 left-0 right-0 border-t border-slate-800/20 pointer-events-none" />
+
+                            {forecast.map((f, idx) => {
+                              const heightPx = Math.round((f.riskScore / 100) * 80);
+                              return (
+                                <div key={idx} className="flex-1 flex flex-col items-center group relative z-10">
+                                  <div className="absolute bottom-full mb-1 bg-slate-950 border border-slate-800 px-2 py-0.5 rounded text-[9px] text-white font-mono opacity-0 group-hover:opacity-100 transition whitespace-nowrap pointer-events-none">
+                                    {f.riskScore}% Estimate ({f.riskLevel})
+                                  </div>
+                                  <div
+                                    style={{ height: `${heightPx}px` }}
+                                    className={`w-full rounded-t-sm transition-all duration-300 ${
+                                      f.riskLevel === 'HIGH'
+                                        ? 'bg-rose-500/80 hover:bg-rose-400'
+                                        : f.riskLevel === 'MODERATE'
+                                        ? 'bg-amber-500/80 hover:bg-amber-400'
+                                        : 'bg-emerald-500/80 hover:bg-emerald-400'
+                                    }`}
+                                  />
+                                  <span className="text-[9px] font-mono text-slate-500 mt-1 font-bold">
+                                    {f.dayLabel === 'Today' ? 'TD' : f.dayLabel === 'Tomorrow' ? 'TM' : `D${idx + 1}`}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Estimate Notice label */}
+                      <div className="text-[10px] text-slate-500 font-mono pt-4 border-t border-slate-800/40 flex items-center justify-between">
+                        <span>📊 AI-assisted risk estimate</span>
+                        <span>Contextual environmental risk projection</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* 7-Day Forecast Strip */}
             {envProfile?.weather?.forecast && envProfile.weather.forecast.length > 0 && (
               <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-5">
@@ -505,6 +707,124 @@ export const Layer2EnvironmentalIntelligence: React.FC<Layer2Props> = ({ current
                       {enhancedAnalysis.riskEvaluation.overallCombinedRiskLevel} RISK
                     </span>
                   </div>
+                </div>
+
+                {/* 🔮 7-Day Crop Disease & Pest Risk Forecast Card */}
+                <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-6 shadow-xl">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 mb-5">
+                    <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                      <span className="text-emerald-400">🔮</span> 7-DAY CROP RISK
+                    </h4>
+                    <span className="text-xs text-slate-400 font-mono">Combined Diagnostic Projection</span>
+                  </div>
+
+                  {(() => {
+                    const forecast = getSevenDayRiskForecast();
+                    if (!forecast || forecast.length === 0) {
+                      return (
+                        <div className="text-center py-8 text-amber-500 font-semibold bg-slate-900/40 rounded-xl border border-slate-800">
+                          ⚠️ Forecast unavailable
+                        </div>
+                      );
+                    }
+
+                    const hasHighRisk = forecast.some(f => f.riskLevel === 'HIGH');
+                    const hasModerateRisk = forecast.some(f => f.riskLevel === 'MODERATE');
+                    const overallExplanation = hasHighRisk
+                      ? "Risk is elevated due to recent rainfall and favorable environmental conditions."
+                      : hasModerateRisk
+                      ? "Risk is moderate. Elevated humidity probability and warm temperatures create slightly conducive conditions."
+                      : "Risk remains low due to stable dry weather parameters and clean atmospheric skies.";
+
+                    return (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* Left: 7 Days List */}
+                        <div className="lg:col-span-5 space-y-2.5">
+                          {forecast.map((f, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center justify-between p-3 bg-slate-900/60 rounded-xl border border-slate-800/40 hover:border-slate-800 transition"
+                            >
+                              <span className="text-sm font-semibold text-slate-300">{f.dayLabel}</span>
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-xs font-mono text-slate-500">{f.temperatureMaxC}°C | 🌧 {f.precipitationSumMm}mm</span>
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold uppercase border ${
+                                  f.riskLevel === 'HIGH'
+                                    ? 'bg-rose-950/80 text-rose-400 border-rose-800/60'
+                                    : f.riskLevel === 'MODERATE'
+                                    ? 'bg-amber-950/80 text-amber-400 border-amber-800/60'
+                                    : 'bg-emerald-950/80 text-emerald-400 border-emerald-800/60'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${
+                                    f.riskLevel === 'HIGH' ? 'bg-rose-500 animate-pulse' : f.riskLevel === 'MODERATE' ? 'bg-amber-500' : 'bg-emerald-500'
+                                  }`} />
+                                  {f.riskLevel}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Right: Trend Curve & Explanation */}
+                        <div className="lg:col-span-7 flex flex-col justify-between bg-slate-900/40 p-5 rounded-xl border border-slate-800/40">
+                          <div className="space-y-4">
+                            {/* Explanation block */}
+                            <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800/60">
+                              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block mb-1">
+                                AI-Assisted Outlook Explanation
+                              </span>
+                              <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                                {overallExplanation}
+                              </p>
+                            </div>
+
+                            {/* Interactive Graph Curve */}
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2.5">
+                                Threat Progression Curve
+                              </span>
+                              <div className="h-28 flex items-end justify-between gap-2 bg-slate-950/60 px-4 pt-6 pb-2 rounded-xl border border-slate-800/80 relative">
+                                {/* Grid markers */}
+                                <div className="absolute top-4 left-0 right-0 border-t border-slate-800/20 pointer-events-none" />
+                                <div className="absolute top-12 left-0 right-0 border-t border-slate-800/20 pointer-events-none" />
+                                <div className="absolute top-20 left-0 right-0 border-t border-slate-800/20 pointer-events-none" />
+
+                                {forecast.map((f, idx) => {
+                                  const heightPx = Math.round((f.riskScore / 100) * 80);
+                                  return (
+                                    <div key={idx} className="flex-1 flex flex-col items-center group relative z-10">
+                                      <div className="absolute bottom-full mb-1 bg-slate-950 border border-slate-800 px-2 py-0.5 rounded text-[9px] text-white font-mono opacity-0 group-hover:opacity-100 transition whitespace-nowrap pointer-events-none">
+                                        {f.riskScore}% Estimate ({f.riskLevel})
+                                      </div>
+                                      <div
+                                        style={{ height: `${heightPx}px` }}
+                                        className={`w-full rounded-t-sm transition-all duration-300 ${
+                                          f.riskLevel === 'HIGH'
+                                            ? 'bg-rose-500/80 hover:bg-rose-400'
+                                            : f.riskLevel === 'MODERATE'
+                                            ? 'bg-amber-500/80 hover:bg-amber-400'
+                                            : 'bg-emerald-500/80 hover:bg-emerald-400'
+                                        }`}
+                                      />
+                                      <span className="text-[9px] font-mono text-slate-500 mt-1 font-bold">
+                                        {f.dayLabel === 'Today' ? 'TD' : f.dayLabel === 'Tomorrow' ? 'TM' : `D${idx + 1}`}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Estimate Notice label */}
+                          <div className="text-[10px] text-slate-500 font-mono pt-4 border-t border-slate-800/40 flex items-center justify-between">
+                            <span>📊 AI-assisted risk estimate</span>
+                            <span>Contextual environmental risk projection</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Explainable Factors Breakdown */}

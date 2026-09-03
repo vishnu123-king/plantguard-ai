@@ -26,6 +26,18 @@ export interface DiseaseVulnerabilityProfile {
   soilPhRange?: [number, number];
 }
 
+export interface ForecastRiskDay {
+  dayLabel: string; // e.g. "Today", "Tomorrow", "Day 3", ...
+  dateStr: string;
+  riskLevel: 'LOW' | 'MODERATE' | 'HIGH';
+  riskScore: number; // 0 to 100, labeled as AI-assisted risk estimate
+  explanation: string;
+  temperatureMaxC: number;
+  precipitationSumMm: number;
+  precipitationProbabilityPercent?: number;
+  windSpeedMaxKmh?: number;
+}
+
 export interface RiskResult {
   environmentalRiskScore: number; // 0.0 to 1.0
   environmentalRiskLevel: RiskLevel;
@@ -37,6 +49,7 @@ export interface RiskResult {
   agronomicActionAdvice: string[];
   calculatedAt: string;
   methodology: 'knowledge-based-environmental-rules-v1';
+  forecast?: ForecastRiskDay[];
 }
 
 export interface EnhancedCropHealthAnalysis {

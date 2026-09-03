@@ -23,11 +23,16 @@ import {
   ChevronRight,
   Compass,
   Layers,
-  CloudRain
+  CloudRain,
+  Bug
 } from "lucide-react";
 import { Layer2EnvironmentalIntelligence } from "./components/Layer2EnvironmentalIntelligence";
 import { SprayWashoutAdvisor } from "./components/SprayWashoutAdvisor";
-
+import { ExplainableDiagnosisPanel } from "./components/ExplainableDiagnosisPanel";
+import { AffectedRegionViewer } from "./components/AffectedRegionViewer";
+import { ImageQualityBanner } from "./components/ImageQualityBanner";
+import { ExplainableDiagnosisData, ImageQualityInfo } from "./shared/types/explainable.types";
+import { AIPestDetectionPanel } from "./components/AIPestDetectionPanel";
 
 interface HealthMetrics {
   risk_score: number;
@@ -38,33 +43,109 @@ interface HealthMetrics {
 interface ImageQuality {
   sufficient: boolean;
   score: number;
+  status?: string;
+  issues?: string[];
+  suggestions?: string;
 }
 
 interface DiagnosisResult {
   id?: number;
   image_filename?: string;
-  plant: {
+  plant?: {
     name: string;
     confidence: number;
   };
-  diagnosis: {
+  plant_name?: string;
+  diagnosis?: {
     disease: string;
     confidence: number;
     status: string;
   };
+  disease_name?: string;
+  confidence?: number;
+  status?: string;
   severity: string;
-  metrics: HealthMetrics;
+  metrics?: HealthMetrics;
+  risk_score?: number;
+  plant_health_score?: number;
+  recovery_outlook?: string;
   symptoms: string[];
   organic_treatment: string[];
   chemical_treatment: string[];
   prevention: string[];
   warnings: string[];
   image_quality?: ImageQuality;
+  explainable?: ExplainableDiagnosisData;
+  visual_evidence?: Array<{ feature: string; importance: "High" | "Medium" | "Low"; explanation: string }>;
+  symptoms_observed?: string[];
+  affected_region_estimate?: number | null;
+  diagnosis_explanation?: string;
+  confidence_explanation?: string;
+  image_quality_data?: ImageQualityInfo;
+  regions?: Array<{ x: number; y: number; width: number; height: number; label: string }>;
+  alternative_matches?: Array<{ disease: string; confidence: number }>;
   created_at?: string;
+  issue_category?: string;
+  issue_categories?: string[];
+  primary_issue?: string;
+  uncertainty?: string;
 }
 
+const compressImage = (file: File, maxDimension = 1000, quality = 0.8): Promise<File> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve(file);
+              return;
+            }
+            const compressedFile = new File([blob], file.name, {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+};
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"diagnose" | "history" | "about">("diagnose");
+  const [activeTab, setActiveTab] = useState<"diagnose" | "pest" | "history" | "spray" | "layer2" | "about">("diagnose");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [fileDimensions, setFileDimensions] = useState<{ width: number; height: number } | null>(null);
@@ -73,6 +154,15 @@ export default function App() {
   const [currentResult, setCurrentResult] = useState<DiagnosisResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Pest Detection state
+  const [pestSelectedFile, setPestSelectedFile] = useState<File | null>(null);
+  const [pestImagePreview, setPestImagePreview] = useState<string | null>(null);
+  const [pestFileDimensions, setPestFileDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [pestIsLoading, setPestIsLoading] = useState<boolean>(false);
+  const [pestLoadingStep, setPestLoadingStep] = useState<number>(0);
+  const [pestCurrentResult, setPestCurrentResult] = useState<any | null>(null);
+  const [pestErrorMessage, setPestErrorMessage] = useState<string | null>(null);
+
   // History state
   const [history, setHistory] = useState<DiagnosisResult[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -80,6 +170,7 @@ export default function App() {
   const [selectedHistoryDetail, setSelectedHistoryDetail] = useState<DiagnosisResult | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pestFileInputRef = useRef<HTMLInputElement>(null);
 
   // Load history on initial mount
   useEffect(() => {
@@ -160,10 +251,13 @@ export default function App() {
       setLoadingStep((prev) => (prev < 4 ? prev + 1 : prev));
     }, 800);
 
-    const formData = new FormData();
-    formData.append("image", selectedFile);
-
     try {
+      // Compress/resize the image to ensure it's under 1MB and uploads quickly
+      const fileToUpload = await compressImage(selectedFile);
+      
+      const formData = new FormData();
+      formData.append("image", fileToUpload);
+
       const res = await fetch("/api/diagnose", {
         method: "POST",
         body: formData,
@@ -180,6 +274,7 @@ export default function App() {
       setCurrentResult(data);
       fetchHistory(); // Refresh history list
     } catch (err: any) {
+      clearInterval(interval);
       setErrorMessage(err.message || "Failed to analyze image. Please try again.");
     } finally {
       setIsLoading(false);
@@ -198,6 +293,99 @@ export default function App() {
       }
     } catch (err) {
       console.error("Failed to delete record:", err);
+    }
+  };
+
+  // Pest Detection Helpers
+  const handlePestFileSelect = (file: File) => {
+    setPestErrorMessage(null);
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      setPestErrorMessage("Invalid file format. Please upload a JPG, PNG, or WEBP image.");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setPestErrorMessage("File size exceeds 10MB limit.");
+      return;
+    }
+
+    setPestSelectedFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      setPestImagePreview(result);
+
+      const img = new Image();
+      img.onload = () => {
+        setPestFileDimensions({ width: img.width, height: img.height });
+      };
+      img.src = result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePestDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handlePestFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handlePestDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+
+  const removeSelectedPestImage = () => {
+    setPestSelectedFile(null);
+    setPestImagePreview(null);
+    setPestFileDimensions(null);
+    setPestErrorMessage(null);
+    if (pestFileInputRef.current) {
+      pestFileInputRef.current.value = "";
+    }
+  };
+
+  const runPestDetection = async () => {
+    if (!pestSelectedFile) return;
+
+    setPestIsLoading(true);
+    setPestLoadingStep(1);
+    setPestErrorMessage(null);
+
+    // Simulated progress steps for smooth experience
+    const interval = setInterval(() => {
+      setPestLoadingStep((prev) => (prev < 4 ? prev + 1 : prev));
+    }, 800);
+
+    try {
+      // Compress/resize the image to ensure it's under 1MB and uploads quickly
+      const fileToUpload = await compressImage(pestSelectedFile);
+
+      const formData = new FormData();
+      formData.append("image", fileToUpload);
+
+      const res = await fetch("/api/pest-detect", {
+        method: "POST",
+        body: formData,
+      });
+
+      clearInterval(interval);
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Failed to analyze image.");
+      }
+
+      const data = await res.json();
+      setPestCurrentResult(data);
+      fetchHistory(); // Refresh history list
+    } catch (err: any) {
+      clearInterval(interval);
+      setPestErrorMessage(err.message || "Failed to analyze image. Please try again.");
+    } finally {
+      setPestIsLoading(false);
+      setPestLoadingStep(0);
     }
   };
 
@@ -264,12 +452,23 @@ export default function App() {
             <button
               onClick={() => setActiveTab("diagnose")}
               className={`px-3.5 py-2 rounded-lg transition ${
-                activeTab === "diagnose"
+                 activeTab === "diagnose"
                   ? "bg-emerald-50 text-emerald-700 font-bold"
                   : "hover:text-emerald-700 hover:bg-slate-50"
               }`}
             >
               Diagnose
+            </button>
+            <button
+              onClick={() => setActiveTab("pest")}
+              className={`px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 ${
+                activeTab === "pest"
+                  ? "bg-emerald-50 text-emerald-700 font-bold border border-emerald-200"
+                  : "hover:text-emerald-700 hover:bg-slate-50 text-slate-600 font-medium"
+              }`}
+            >
+              <Bug className="w-3.5 h-3.5 text-emerald-600" />
+              Pest Detection
             </button>
             <button
               onClick={() => setActiveTab("history")}
@@ -374,51 +573,178 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Main Results Summary */}
-                <div className="grid md:grid-cols-3 gap-6">
-                  {/* Image & Diagnosis Status Card */}
-                  <div className="md:col-span-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs flex flex-col items-center text-center">
-                    <div className="w-full h-52 bg-slate-100 rounded-xl overflow-hidden mb-4 border border-slate-200 flex items-center justify-center relative">
-                      {imagePreview ? (
-                        <img src={imagePreview} alt="Analyzed Leaf" className="w-full h-full object-cover" />
-                      ) : (
-                        <Leaf className="w-16 h-16 text-emerald-300" />
-                      )}
-                    </div>
+                {/* AI Image Quality Pre-Validation Banner */}
+                <ImageQualityBanner
+                  imageQuality={
+                    currentResult.explainable?.imageQuality ||
+                    currentResult.image_quality_data ||
+                    (currentResult.image_quality as any)
+                  }
+                  onRetake={removeSelectedImage}
+                />
 
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-2 border ${
-                        currentResult.diagnosis.status.toLowerCase() === "healthy"
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                          : "bg-rose-100 text-rose-800 border-rose-200"
-                      }`}
-                    >
-                      {currentResult.diagnosis.status}
-                    </span>
+                {(() => {
+                  const isQualityInsufficient =
+                    currentResult.explainable?.imageQuality?.status === "INSUFFICIENT" ||
+                    currentResult.image_quality_data?.status === "INSUFFICIENT" ||
+                    currentResult.image_quality?.status === "INSUFFICIENT";
 
-                    <h2 className="text-xl font-extrabold text-slate-900 mb-1">
-                      {currentResult.diagnosis.disease}
-                    </h2>
-                    <p className="text-xs font-semibold text-slate-500 mb-4">
-                      Plant: <span className="text-slate-800">{currentResult.plant.name}</span>
-                    </p>
+                  if (isQualityInsufficient) {
+                    const qualityInfo =
+                      currentResult.explainable?.imageQuality ||
+                      currentResult.image_quality_data ||
+                      (currentResult.image_quality as any);
 
-                    {/* Confidence Meter */}
-                    <div className="w-full bg-slate-100 rounded-full h-2.5 mb-1.5 overflow-hidden">
-                      <div
-                        className="bg-emerald-600 h-full rounded-full transition-all duration-700"
-                        style={{ width: `${Math.round(currentResult.diagnosis.confidence)}%` }}
-                      ></div>
-                    </div>
-                    <div className="text-xs text-slate-500 font-medium flex justify-between w-full px-1">
-                      <span>AI Confidence</span>
-                      <span className="font-bold text-slate-800">
-                        {Math.round(currentResult.diagnosis.confidence)}%
+                    return (
+                      <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm text-center max-w-2xl mx-auto space-y-6">
+                        <div className="mx-auto w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center border border-amber-100">
+                          <AlertTriangle className="w-8 h-8 text-amber-500 animate-pulse" />
+                        </div>
+                        <div className="space-y-2">
+                          <h2 className="text-xl font-extrabold text-slate-900">
+                            Foliage Diagnosis Paused
+                          </h2>
+                          <p className="text-sm text-slate-500 max-w-md mx-auto">
+                            The uploaded photo quality is insufficient for a reliable AI diagnosis. To protect your crops, we do not issue diagnoses based on unclear images.
+                          </p>
+                        </div>
+
+                        {/* Specific issues list */}
+                        {qualityInfo?.issues && qualityInfo.issues.length > 0 && (
+                          <div className="bg-slate-50 p-4 rounded-xl text-left border border-slate-100 max-w-md mx-auto">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                              Identified Quality Issues:
+                            </span>
+                            <ul className="list-disc list-inside space-y-1 text-xs text-slate-600 font-medium">
+                              {qualityInfo.issues.map((issue: string, idx: number) => (
+                                <li key={idx}>{issue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Suggestion banner */}
+                        {qualityInfo?.suggestions && (
+                          <div className="bg-amber-50/50 p-4 rounded-xl text-left border border-amber-100 max-w-md mx-auto">
+                            <span className="text-xs font-bold text-amber-800 uppercase tracking-wider block mb-1">
+                              AI Crop Doctor Suggestion:
+                            </span>
+                            <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                              {qualityInfo.suggestions}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="border-t border-slate-100 pt-6 space-y-4">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                            How to take a Perfect Leaf Photo:
+                          </h4>
+                          <div className="grid sm:grid-cols-2 gap-4 text-left max-w-lg mx-auto">
+                            <div className="space-y-1">
+                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Sharp Focus
+                              </span>
+                              <p className="text-[11px] text-slate-500 leading-normal">
+                                Hold camera steady, 10-15cm away, and tap screen to focus.
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Bright Light
+                              </span>
+                              <p className="text-[11px] text-slate-500 leading-normal">
+                                Capture under bright, uniform daylight. Avoid strong shadows.
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Isolated Leaf
+                              </span>
+                              <p className="text-[11px] text-slate-500 leading-normal">
+                                Focus on a single leaf containing the symptoms in full view.
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Clean Frame
+                              </span>
+                              <p className="text-[11px] text-slate-500 leading-normal">
+                                Avoid hands, tools, or random background clutter.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2">
+                          <button
+                            onClick={() => {
+                              setCurrentResult(null);
+                              removeSelectedImage();
+                            }}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition cursor-pointer"
+                          >
+                            <Upload className="w-4 h-4" /> Try Another Photo
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {/* Main Results Summary & Visual Evidence Inspector */}
+                      <div className="grid md:grid-cols-3 gap-6">
+                  {/* Left Column: Interactive Leaf Image & Affected Region Inspector */}
+                  <div className="md:col-span-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs flex flex-col">
+                    <AffectedRegionViewer
+                      imageUrl={imagePreview || (currentResult.image_filename ? `/uploads/${currentResult.image_filename}` : "")}
+                      regions={currentResult.explainable?.regions || currentResult.regions}
+                      diseaseName={currentResult.diagnosis?.disease || currentResult.disease_name || "Plant Condition"}
+                      plantName={currentResult.plant?.name || currentResult.plant_name || "Crop"}
+                      affectedAreaPercent={
+                        currentResult.explainable?.affectedRegionEstimate ??
+                        currentResult.affected_region_estimate ??
+                        undefined
+                      }
+                    />
+
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col items-center text-center">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-2 border ${
+                          (currentResult.diagnosis?.status || currentResult.status || "").toLowerCase() === "healthy"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                            : "bg-rose-100 text-rose-800 border-rose-200"
+                        }`}
+                      >
+                        {currentResult.diagnosis?.status || currentResult.status || "DIAGNOSED"}
                       </span>
+
+                      <h2 className="text-xl font-extrabold text-slate-900 mb-1">
+                        {currentResult.diagnosis?.disease || currentResult.disease_name}
+                      </h2>
+                      <p className="text-xs font-semibold text-slate-500 mb-4">
+                        Plant: <span className="text-slate-800">{currentResult.plant?.name || currentResult.plant_name}</span>
+                      </p>
+
+                      {/* Confidence Meter */}
+                      <div className="w-full bg-slate-100 rounded-full h-2.5 mb-1.5 overflow-hidden">
+                        <div
+                          className="bg-emerald-600 h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${Math.round(currentResult.diagnosis?.confidence ?? currentResult.confidence ?? 85)}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-slate-500 font-medium flex justify-between w-full px-1">
+                        <span>AI Confidence</span>
+                        <span className="font-bold text-slate-800">
+                          {Math.round(currentResult.diagnosis?.confidence ?? currentResult.confidence ?? 85)}%
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Metrics Dashboard */}
+                  {/* Right 2 Columns: Metrics Dashboard */}
                   <div className="md:col-span-2 grid sm:grid-cols-2 gap-4">
                     {/* Disease Risk Score */}
                     <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between">
@@ -431,7 +757,7 @@ export default function App() {
                         </div>
                         <div className="flex items-baseline gap-2">
                           <span className="text-4xl font-black text-amber-600">
-                            {currentResult.metrics.risk_score}
+                            {currentResult.metrics?.risk_score ?? currentResult.risk_score ?? 50}
                           </span>
                           <span className="text-xs font-semibold text-slate-400">/ 100</span>
                         </div>
@@ -452,7 +778,7 @@ export default function App() {
                         </div>
                         <div className="flex items-baseline gap-2">
                           <span className="text-4xl font-black text-emerald-600">
-                            {currentResult.metrics.plant_health_score}
+                            {currentResult.metrics?.plant_health_score ?? currentResult.plant_health_score ?? 70}
                           </span>
                           <span className="text-xs font-semibold text-slate-400">/ 100</span>
                         </div>
@@ -488,7 +814,7 @@ export default function App() {
                           Recovery Outlook
                         </span>
                         <span className="text-2xl font-black text-slate-800">
-                          {currentResult.metrics.recovery_outlook}
+                          {currentResult.metrics?.recovery_outlook ?? currentResult.recovery_outlook ?? "Good"}
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 mt-3 border-t border-slate-100 pt-2">
@@ -497,6 +823,28 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* 🔍 AI EXPLAINABLE DIAGNOSIS PANEL */}
+                <ExplainableDiagnosisPanel
+                  explainable={
+                    currentResult.explainable || {
+                      visualEvidence: currentResult.visual_evidence || [],
+                      symptomsObserved: currentResult.symptoms_observed || currentResult.symptoms || [],
+                      affectedRegionEstimate: currentResult.affected_region_estimate ?? null,
+                      diagnosisExplanation: currentResult.diagnosis_explanation || "",
+                      confidenceExplanation: currentResult.confidence_explanation || "",
+                      imageQuality: currentResult.image_quality_data || (currentResult.image_quality as any),
+                      regions: currentResult.regions,
+                      alternativeMatches: currentResult.alternative_matches,
+                    }
+                  }
+                  plantName={currentResult.plant?.name || currentResult.plant_name || "Crop"}
+                  diseaseName={currentResult.diagnosis?.disease || currentResult.disease_name || "Pathogen"}
+                  confidence={currentResult.diagnosis?.confidence ?? currentResult.confidence ?? 85}
+                  severity={currentResult.severity}
+                  symptoms={currentResult.symptoms}
+                  rawResult={currentResult}
+                />
 
                 {/* Warnings Box */}
                 {currentResult.warnings && currentResult.warnings.length > 0 && (
@@ -614,6 +962,9 @@ export default function App() {
 
                 {/* Layer 2 Environmental Intelligence & Risk Engine */}
                 <Layer2EnvironmentalIntelligence currentDiagnosis={currentResult} />
+                    </>
+                  );
+                })()}
               </div>
             ) : (
               /* Upload & Interactive Form */
@@ -765,6 +1116,213 @@ export default function App() {
           </div>
         )}
 
+        {/* ================= PEST/INSECT DETECTION TAB ================= */}
+        {activeTab === "pest" && (
+          <div>
+            {/* Hero Heading */}
+            {!pestCurrentResult && (
+              <div className="text-center max-w-2xl mx-auto mb-8">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 mb-3 border border-emerald-200">
+                  <Bug className="w-3.5 h-3.5 text-emerald-600" />
+                  AI Insect & Vector Entomology Engine
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-3">
+                  AI Pest & Insect Detection
+                </h1>
+                <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
+                  Take or upload a leaf photo to identify insects, eggs, nymphs, and feeding damage. Receive targeted bio-rational treatments and Integrated Pest Management (IPM) advice.
+                </p>
+              </div>
+            )}
+
+            {/* Error Banner */}
+            {pestErrorMessage && (
+              <div className="max-w-xl mx-auto mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl flex items-start gap-3 text-sm">
+                <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-semibold block">Error</span>
+                  <span>{pestErrorMessage}</span>
+                </div>
+                <button onClick={() => setPestErrorMessage(null)} className="text-rose-500 hover:text-rose-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Active Analysis Result View */}
+            {pestCurrentResult ? (
+              <div className="space-y-6">
+                {/* Back to Upload button */}
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setPestCurrentResult(null)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold shadow-2xs transition"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Scan Another Leaf / Insect
+                  </button>
+                  <span className="text-xs text-slate-400 font-medium">
+                    Report ID: #{pestCurrentResult.id || "LIVE_PEST"}
+                  </span>
+                </div>
+
+                {/* Main Results Summary */}
+                <AIPestDetectionPanel
+                  result={pestCurrentResult}
+                  imageUrl={pestImagePreview || (pestCurrentResult.image_filename ? `/uploads/${pestCurrentResult.image_filename}` : "")}
+                  onScanAgain={() => setPestCurrentResult(null)}
+                  history={history}
+                />
+              </div>
+            ) : (
+              /* Upload & Interactive Form */
+              <div className="max-w-2xl mx-auto space-y-6">
+                <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm relative">
+                  {/* File Upload Zone */}
+                  <div
+                    onDrop={handlePestDrop}
+                    onDragOver={handlePestDragOver}
+                    onClick={() => !pestSelectedFile && pestFileInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-8 transition-all flex flex-col items-center justify-center min-h-[220px] text-center ${
+                      pestSelectedFile
+                        ? "border-emerald-300 bg-emerald-50/30"
+                        : "border-slate-300 hover:border-emerald-500 bg-slate-50/60 cursor-pointer"
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      ref={pestFileInputRef}
+                      onChange={(e) => e.target.files?.[0] && handlePestFileSelect(e.target.files[0])}
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                    />
+
+                    {!pestSelectedFile ? (
+                      <div className="flex flex-col items-center">
+                        <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-700 mb-3 shadow-2xs">
+                          <Bug className="w-8 h-8" />
+                        </div>
+                        <p className="text-slate-800 font-bold text-base mb-1">
+                          Drop your insect or damaged leaf image here or click to upload
+                        </p>
+                        <p className="text-xs text-slate-400 mb-4">
+                          Supported formats: JPG, PNG, WEBP (Max 10MB)
+                        </p>
+                        <button
+                          type="button"
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-xs transition shadow-2xs"
+                        >
+                          Select Leaf Image
+                        </button>
+                      </div>
+                    ) : (
+                      /* Image Selected Preview */
+                      <div className="w-full flex flex-col items-center">
+                        <img
+                          src={pestImagePreview!}
+                          alt="Pest Leaf Preview"
+                          className="max-h-64 rounded-xl shadow-xs border border-slate-200 mb-4 object-contain"
+                        />
+                        <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-500 mb-3">
+                          <span className="font-semibold text-slate-800">{pestSelectedFile.name}</span>
+                          <span>•</span>
+                          <span>{(pestSelectedFile.size / (1024 * 1024)).toFixed(2)} MB</span>
+                          {pestFileDimensions && (
+                            <>
+                              <span>•</span>
+                              <span>
+                                {pestFileDimensions.width} × {pestFileDimensions.height} px
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeSelectedPestImage();
+                          }}
+                          className="text-xs font-semibold text-rose-600 hover:text-rose-800 hover:underline flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> Remove & Select Different Image
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Loading State Overlay / Progress */}
+                  {pestIsLoading ? (
+                    <div className="mt-6 p-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-3">
+                      <div className="inline-block animate-spin text-emerald-600">
+                        <RefreshCw className="w-8 h-8" />
+                      </div>
+                      <h3 className="font-extrabold text-slate-800 text-base">
+                        Detecting Insect and Pest vectors with AI...
+                      </h3>
+                      <div className="max-w-xs mx-auto space-y-2 text-xs text-left">
+                        <div className={`flex items-center gap-2 ${pestLoadingStep >= 1 ? "text-emerald-700 font-semibold" : "text-slate-400"}`}>
+                          <CheckCircle2 className="w-4 h-4" /> 1. Inspecting image quality for insects/vectors
+                        </div>
+                        <div className={`flex items-center gap-2 ${pestLoadingStep >= 2 ? "text-emerald-700 font-semibold" : "text-slate-400"}`}>
+                          <CheckCircle2 className="w-4 h-4" /> 2. Analyzing structural leaf damage & chewing patterns
+                        </div>
+                        <div className={`flex items-center gap-2 ${pestLoadingStep >= 3 ? "text-emerald-700 font-semibold" : "text-slate-400"}`}>
+                          <CheckCircle2 className="w-4 h-4" /> 3. Deep vision network locating crop pests and nymphs
+                        </div>
+                        <div className={`flex items-center gap-2 ${pestLoadingStep >= 4 ? "text-emerald-700 font-semibold" : "text-slate-400"}`}>
+                          <CheckCircle2 className="w-4 h-4" /> 4. Framing Integrated Pest Management (IPM) recommendations
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Analyze Button */
+                    <div className="mt-6">
+                      <button
+                        type="button"
+                        onClick={runPestDetection}
+                        disabled={!pestSelectedFile}
+                        className={`w-full py-3.5 rounded-xl font-extrabold text-sm transition flex items-center justify-center gap-2 shadow-2xs ${
+                          pestSelectedFile
+                            ? "bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                            : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        }`}
+                      >
+                        <Bug className="w-4 h-4" /> Detect Pests Now
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Features Grid */}
+                <div className="grid sm:grid-cols-3 gap-4 pt-4">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                    <Bug className="w-5 h-5 text-emerald-600 mb-2" />
+                    <h4 className="font-bold text-xs text-slate-900 mb-1">Insect Taxonomy Match</h4>
+                    <p className="text-[11px] text-slate-500 leading-normal">
+                      Identifies pest groups, scientific species tags, life stages, and visible count.
+                    </p>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                    <Activity className="w-5 h-5 text-emerald-600 mb-2" />
+                    <h4 className="font-bold text-xs text-slate-900 mb-1">Bite & Chewing Analysis</h4>
+                    <p className="text-[11px] text-slate-500 leading-normal">
+                      Differentiates between chewing, sap-sucking, and leaf-mining damage patterns.
+                    </p>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+                    <Sparkles className="w-5 h-5 text-emerald-600 mb-2" />
+                    <h4 className="font-bold text-xs text-slate-900 mb-1">IPM Control Plans</h4>
+                    <p className="text-[11px] text-slate-500 leading-normal">
+                      Curated physical, cultural, bio-rational, and approved chemical active options.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ================= HISTORY TAB ================= */}
         {activeTab === "history" && (
           <div className="space-y-6">
@@ -817,7 +1375,8 @@ export default function App() {
                   const diseaseName = rec.disease_name || rec.diagnosis?.disease || "Condition";
                   const confidence = rec.confidence || rec.diagnosis?.confidence || 0;
                   const riskScore = rec.risk_score ?? rec.metrics?.risk_score ?? 50;
-                  const isHealthy = diseaseName.toLowerCase().includes("healthy") || rec.severity === "none";
+                  const isPest = rec.type === "pest";
+                  const isHealthy = !isPest && (diseaseName.toLowerCase().includes("healthy") || rec.severity === "none");
 
                   return (
                     <div
@@ -827,22 +1386,28 @@ export default function App() {
                       <div className="flex items-center gap-4">
                         <div
                           className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 font-bold ${
-                            isHealthy ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                            isPest
+                              ? "bg-amber-100 text-amber-800"
+                              : isHealthy
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-rose-100 text-rose-800"
                           }`}
                         >
-                          {isHealthy ? "🌿" : "🍂"}
+                          {isPest ? "🐛" : isHealthy ? "🌿" : "🍂"}
                         </div>
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <h3 className="font-extrabold text-slate-900 text-sm">{plantName}</h3>
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
-                                isHealthy
+                                isPest
+                                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                                  : isHealthy
                                   ? "bg-emerald-100 text-emerald-800 border-emerald-200"
                                   : "bg-rose-100 text-rose-800 border-rose-200"
                               }`}
                             >
-                              {diseaseName}
+                              {isPest ? `Pest: ${diseaseName}` : diseaseName}
                             </span>
                           </div>
                           <p className="text-xs text-slate-500">
@@ -901,9 +1466,13 @@ export default function App() {
         {/* Modal for History Item Detail */}
         {selectedHistoryDetail && (
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-xl relative border border-slate-200">
+            <div className={`bg-white rounded-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-xl relative border border-slate-200 ${
+              selectedHistoryDetail.type === "pest" ? "max-w-4xl" : "max-w-2xl"
+            }`}>
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="font-extrabold text-base text-slate-900">Diagnosis Detail Report</h3>
+                <h3 className="font-extrabold text-base text-slate-900">
+                  {selectedHistoryDetail.type === "pest" ? "Pest & Insect Detection Report" : "Diagnosis Detail Report"}
+                </h3>
                 <button
                   onClick={() => setSelectedHistoryDetail(null)}
                   className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
@@ -912,66 +1481,126 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xl">
-                  🌿
+              {selectedHistoryDetail.type === "pest" ? (
+                <div className="pt-2">
+                  <AIPestDetectionPanel
+                    result={selectedHistoryDetail as any}
+                    imageUrl={selectedHistoryDetail.image_filename ? `/uploads/${selectedHistoryDetail.image_filename}` : ""}
+                    onScanAgain={() => setSelectedHistoryDetail(null)}
+                    history={history}
+                  />
                 </div>
-                <div>
-                  <h4 className="font-extrabold text-slate-900 text-base">
-                    {selectedHistoryDetail.plant_name || selectedHistoryDetail.plant?.name}
-                  </h4>
-                  <p className="text-xs text-slate-600 font-semibold">
-                    Condition: {selectedHistoryDetail.disease_name || selectedHistoryDetail.diagnosis?.disease}
-                  </p>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xl">
+                      🌿
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-slate-900 text-base">
+                        {selectedHistoryDetail.plant_name || selectedHistoryDetail.plant?.name}
+                      </h4>
+                      <p className="text-xs text-slate-600 font-semibold">
+                        Condition: {selectedHistoryDetail.disease_name || selectedHistoryDetail.diagnosis?.disease}
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                  <span className="text-[10px] font-bold text-amber-700 uppercase block">Disease Risk</span>
-                  <span className="text-xl font-extrabold text-amber-900">
-                    {selectedHistoryDetail.risk_score ?? selectedHistoryDetail.metrics?.risk_score}/100
-                  </span>
-                </div>
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                  <span className="text-[10px] font-bold text-emerald-700 uppercase block">Plant Health</span>
-                  <span className="text-xl font-extrabold text-emerald-900">
-                    {selectedHistoryDetail.plant_health_score ?? selectedHistoryDetail.metrics?.plant_health_score}/100
-                  </span>
-                </div>
-              </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <span className="text-[10px] font-bold text-amber-700 uppercase block">Disease Risk</span>
+                      <span className="text-xl font-extrabold text-amber-900">
+                        {selectedHistoryDetail.risk_score ?? selectedHistoryDetail.metrics?.risk_score ?? 50}/100
+                      </span>
+                    </div>
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <span className="text-[10px] font-bold text-emerald-700 uppercase block">Plant Health</span>
+                      <span className="text-xl font-extrabold text-emerald-900">
+                        {selectedHistoryDetail.plant_health_score ?? selectedHistoryDetail.metrics?.plant_health_score ?? 70}/100
+                      </span>
+                    </div>
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl col-span-2 sm:col-span-1">
+                      <span className="text-[10px] font-bold text-blue-700 uppercase block">Affected Foliage</span>
+                      <span className="text-xl font-extrabold text-blue-900">
+                        {selectedHistoryDetail.affected_region_estimate ?? selectedHistoryDetail.explainable?.affectedRegionEstimate ?? 0}%
+                      </span>
+                    </div>
+                  </div>
 
-              {selectedHistoryDetail.symptoms && (
-                <div>
-                  <h5 className="font-extrabold text-xs text-slate-800 mb-2">Detected Symptoms:</h5>
-                  <ul className="list-disc list-inside space-y-1 text-xs text-slate-600">
-                    {selectedHistoryDetail.symptoms.map((s, i) => (
-                      <li key={i}>{s}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                  {/* Explainable AI Findings in History */}
+                  {(selectedHistoryDetail.diagnosis_explanation || selectedHistoryDetail.explainable?.diagnosisExplanation) && (
+                    <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1.5">
+                      <h5 className="font-extrabold text-xs text-emerald-900 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
+                        Explainable AI Clinical Rationale
+                      </h5>
+                      <p className="text-xs text-slate-700 leading-relaxed">
+                        {selectedHistoryDetail.diagnosis_explanation || selectedHistoryDetail.explainable?.diagnosisExplanation}
+                      </p>
+                      {(selectedHistoryDetail.confidence_explanation || selectedHistoryDetail.explainable?.confidenceExplanation) && (
+                        <p className="text-[11px] text-slate-500 italic pt-1 border-t border-emerald-100">
+                          {selectedHistoryDetail.confidence_explanation || selectedHistoryDetail.explainable?.confidenceExplanation}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
-              {selectedHistoryDetail.organic_treatment && (
-                <div>
-                  <h5 className="font-extrabold text-xs text-emerald-800 mb-2">Organic Treatment:</h5>
-                  <ul className="list-disc list-inside space-y-1 text-xs text-slate-600">
-                    {selectedHistoryDetail.organic_treatment.map((o, i) => (
-                      <li key={i}>{o}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                  {/* Visual Evidence in History */}
+                  {((selectedHistoryDetail.visual_evidence && selectedHistoryDetail.visual_evidence.length > 0) ||
+                    (selectedHistoryDetail.explainable?.visualEvidence && selectedHistoryDetail.explainable.visualEvidence.length > 0)) && (
+                    <div>
+                      <h5 className="font-extrabold text-xs text-slate-800 mb-2">Key Visual Evidence:</h5>
+                      <div className="space-y-1.5">
+                        {(selectedHistoryDetail.visual_evidence || selectedHistoryDetail.explainable?.visualEvidence || []).map((ev, i) => (
+                          <div key={i} className="flex items-start gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              ev.importance === "High" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                            }`}>
+                              {ev.importance}
+                            </span>
+                            <div>
+                              <span className="font-semibold text-slate-800">{ev.feature}</span>
+                              <p className="text-[11px] text-slate-500">{ev.explanation}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-              {selectedHistoryDetail.chemical_treatment && (
-                <div>
-                  <h5 className="font-extrabold text-xs text-blue-800 mb-2">Chemical Treatment:</h5>
-                  <ul className="list-disc list-inside space-y-1 text-xs text-slate-600">
-                    {selectedHistoryDetail.chemical_treatment.map((c, i) => (
-                      <li key={i}>{c}</li>
-                    ))}
-                  </ul>
-                </div>
+                  {selectedHistoryDetail.symptoms && (
+                    <div>
+                      <h5 className="font-extrabold text-xs text-slate-800 mb-2">Detected Symptoms:</h5>
+                      <ul className="list-disc list-inside space-y-1 text-xs text-slate-600">
+                        {selectedHistoryDetail.symptoms.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {selectedHistoryDetail.organic_treatment && (
+                    <div>
+                      <h5 className="font-extrabold text-xs text-emerald-800 mb-2">Organic Treatment:</h5>
+                      <ul className="list-disc list-inside space-y-1 text-xs text-slate-600">
+                        {selectedHistoryDetail.organic_treatment.map((o, i) => (
+                          <li key={i}>{o}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {selectedHistoryDetail.chemical_treatment && (
+                    <div>
+                      <h5 className="font-extrabold text-xs text-blue-800 mb-2">Chemical Treatment:</h5>
+                      <ul className="list-disc list-inside space-y-1 text-xs text-slate-600">
+                        {selectedHistoryDetail.chemical_treatment.map((c, i) => (
+                          <li key={i}>{c}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="pt-2 text-right">

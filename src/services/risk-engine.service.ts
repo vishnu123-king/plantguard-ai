@@ -257,6 +257,8 @@ export class KnowledgeBasedRiskEngine implements RiskEngine {
       'Scout lower canopy leaves twice weekly for early lesion development.'
     ];
 
+    const forecast = this.generate7DayForecast(layer1, environment, farm, profile, isHealthy, diseaseName);
+
     return {
       environmentalRiskScore: envRiskScore,
       environmentalRiskLevel: envRiskLevel,
@@ -267,8 +269,117 @@ export class KnowledgeBasedRiskEngine implements RiskEngine {
       summaryExplanation,
       agronomicActionAdvice,
       calculatedAt: new Date().toISOString(),
-      methodology: 'knowledge-based-environmental-rules-v1'
+      methodology: 'knowledge-based-environmental-rules-v1',
+      forecast
     };
+  }
+
+  private generate7DayForecast(
+    layer1: Layer1Analysis,
+    environment: EnvironmentalProfile,
+    farm: FarmContext,
+    profile: any,
+    isHealthy: boolean,
+    diseaseName: string
+  ): any[] | undefined {
+    const forecastList = environment.weather?.forecast;
+    if (!forecastList || forecastList.length === 0) {
+      return undefined;
+    }
+
+    const optTempMin = profile.optimalTempRangeC ? profile.optimalTempRangeC[0] : 22;
+    const optTempMax = profile.optimalTempRangeC ? profile.optimalTempRangeC[1] : 28;
+
+    return forecastList.slice(0, 7).map((f, index) => {
+      let dayLabel = `Day ${index + 1}`;
+      if (index === 0) dayLabel = 'Today';
+      else if (index === 1) dayLabel = 'Tomorrow';
+      else if (index === 2) dayLabel = 'Day 3';
+      else if (index === 3) dayLabel = 'Day 4';
+      else if (index === 4) dayLabel = 'Day 5';
+      else if (index === 5) dayLabel = 'Day 6';
+      else if (index === 6) dayLabel = 'Day 7';
+
+      // Base score starts higher if disease/pest is confirmed
+      const hasDisease = layer1.disease.status === 'diseased' || (!isHealthy && !diseaseName.toLowerCase().includes('healthy'));
+      const isPest = diseaseName.toLowerCase().includes('pest') || diseaseName.toLowerCase().includes('mite') || diseaseName.toLowerCase().includes('aphid') || diseaseName.toLowerCase().includes('worm');
+      
+      let baseScore = 20;
+      if (hasDisease) {
+        baseScore = 55;
+      } else if (isPest) {
+        baseScore = 50;
+      }
+
+      // Add temperature suitability
+      const tempMax = f.temperatureMaxC;
+      if (tempMax >= optTempMin && tempMax <= optTempMax) {
+        baseScore += 15;
+      } else if (tempMax >= optTempMin - 4 && tempMax <= optTempMax + 4) {
+        baseScore += 8;
+      }
+
+      // Add rain/precipitation impact
+      const rainSum = f.precipitationSumMm;
+      const rainProb = f.precipitationProbabilityPercent ?? 0;
+      if (rainSum >= 5 || rainProb >= 60) {
+        baseScore += 25;
+      } else if (rainSum >= 1 || rainProb >= 30) {
+        baseScore += 12;
+      }
+
+      // Wind impact
+      const windMax = f.windSpeedMaxKmh ?? 10;
+      if (windMax > 18) {
+        baseScore += 8;
+      }
+
+      // Special Pest condition: dry & warm weather promotes rapid reproduction
+      if (isPest && rainSum < 1 && tempMax >= 26) {
+        baseScore += 15;
+      }
+
+      // Clamp score
+      const finalScore = Math.min(95, Math.max(10, baseScore));
+      
+      let riskLevel: 'LOW' | 'MODERATE' | 'HIGH' = 'LOW';
+      if (finalScore >= 70) {
+        riskLevel = 'HIGH';
+      } else if (finalScore >= 40) {
+        riskLevel = 'MODERATE';
+      }
+
+      // Generate a meaningful explanation
+      const reasons: string[] = [];
+      if (rainSum >= 2) {
+        reasons.push(`forecasted rain of ${rainSum}mm`);
+      }
+      if (tempMax >= optTempMin && tempMax <= optTempMax) {
+        reasons.push(`optimal pathogen incubation temperatures (${tempMax}°C)`);
+      }
+      if (windMax > 15) {
+        reasons.push(`higher wind speeds (${windMax} km/h) facilitating spore spread`);
+      }
+
+      let explanation = 'Risk remains low due to unfavorable microclimate parameters and clear weather.';
+      if (riskLevel === 'HIGH') {
+        explanation = `Risk is elevated due to ${reasons.join(' and ') || 'favorable environmental conditions'}.`;
+      } else if (riskLevel === 'MODERATE') {
+        explanation = `Risk is moderate due to ${reasons.join(' or ') || 'moderate weather conditions'}.`;
+      }
+
+      return {
+        dayLabel,
+        dateStr: f.date,
+        riskLevel,
+        riskScore: finalScore,
+        explanation,
+        temperatureMaxC: tempMax,
+        precipitationSumMm: rainSum,
+        precipitationProbabilityPercent: rainProb,
+        windSpeedMaxKmh: windMax
+      };
+    });
   }
 
   private findMatchingDiseaseProfile(diseaseName: string, cropName: string): any {
